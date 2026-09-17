@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required, not optional. The stored password is written with a `.userPresence`
+	     SecAccessControl (Touch ID / device password), which puts the item in the
+	     data-protection keychain — and that refuses access without this entitlement,
+	     failing with errSecMissingEntitlement: "A required entitlement is not present."
+	     The group is hardcoded to this app's team prefix rather than using
+	     $(AppIdentifierPrefix), which is only substituted when a provisioning profile
+	     supplies it; this app is signed locally with a development certificate and no
+	     profile. It must match the DEVELOPMENT_TEAM the app is signed with. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>G2LCW65DC4.com.samuelmittman.macid</string>
+	</array>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+</dict>
+</plist>

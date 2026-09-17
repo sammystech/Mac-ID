@@ -1,0 +1,11 @@
+# Build products — releases are published as GitHub Release assets, not committed.
+Mac ID.app/
+*.dmg
+src/releases/
+src/dist/
+src/.release-build*
+
+# Xcode
+**/xcuserdata/
+**/DerivedData/
+.DS_Store

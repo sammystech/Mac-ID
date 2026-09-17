@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sparkle update feed. This URL is compiled into every copy that ships, and copies
+	     already in the wild will keep asking THIS address forever — a wrong value here
+	     cannot be corrected by a later release. tools/release.sh refuses to package while
+	     it still says REPLACE-ME.
+	     GitHub turns the repo name "Mac ID" into "Mac-ID" — repo names cannot contain spaces. -->
+	<key>SUFeedURL</key>
+	<string>https://github.com/sammystech/Mac-ID/releases/latest/download/appcast.xml</string>
+
+	<!-- EdDSA public key for THIS project. Sparkle refuses any update whose signature does
+	     not verify against it, so a hostile or mistaken appcast cannot install anything.
+	     The matching private key lives in the login keychain and is used by sign_update;
+	     it is not in this repo and cannot be recovered if lost — losing it means shipping
+	     a new public key, which strands every copy already installed. Back it up:
+	         security find-generic-password -s "https://sparkle-project.org" -w
+	     Upstream Glance's key was deliberately removed; signing against it was never possible
+	     and pointing at its feed would have replaced this app with a different one. -->
+	<key>SUPublicEDKey</key>
+	<string>uKUdbCTMCAWtKhvS4mUYirjeM7VwYsdZprh3gA7EzYQ=</string>
+
+	<!-- Ask before enabling automatic checks rather than assuming consent. -->
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<!-- Download and prepare in the background, but never install without the user acting. -->
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableInstallerLauncherService</key>
+	<false/>
+</dict>
+</plist>
