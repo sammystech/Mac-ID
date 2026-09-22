@@ -105,6 +105,19 @@ SPARKLE_BIN=$(find_sparkle_bin)
 
 say "Re-signing for distribution"
 
+# Re-sign a COPY, never the built app itself. The Development-signed original is what belongs on
+# your own Macs: it keeps the keychain-access-group (so it can still read the password you already
+# stored) and a certificate-based designated requirement (so the Accessibility grant survives a
+# rebuild). Installing the ad-hoc distributable locally breaks both — it lands in a different
+# keychain group and its DR is the binary hash, which is exactly how "it won't unlock, something
+# about permissions" happens.
+LOCAL_APP="$APP"
+APP="$BUILD_DIR/dist-app/$APP_NAME.app"
+rm -rf "$BUILD_DIR/dist-app"; mkdir -p "$BUILD_DIR/dist-app"
+cp -R "$LOCAL_APP" "$APP"
+echo "  local (Development-signed) build kept at:"
+echo "    $LOCAL_APP"
+
 rm -f "$APP/Contents/embedded.provisionprofile"
 echo "  removed the device-locked provisioning profile"
 
@@ -213,6 +226,11 @@ Upload every zip plus the appcast to the new release, because the feed points at
       --title "$APP_NAME $VERSION" \\
       --notes "..." \\
       "$RELEASES_DIR"/*.zip "$APPCAST" "$DMG"
+
+Install YOUR OWN copy from the Development-signed build, not the DMG:
+
+    rm -rf "$HOME/mac-id/$APP_NAME.app"
+    cp -R "$LOCAL_APP" "$HOME/mac-id/$APP_NAME.app"
 
 Then confirm the feed is actually live before trusting it:
 

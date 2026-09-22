@@ -142,18 +142,60 @@ enum SecureCredentialManager {
         }
 
         let key = SymmetricKey(size: .bits256)
-        let access = try KeychainManager.makeUserPresenceAccessControl()
-        try KeychainManager.save(
-            account: sessionKeyAccount,
-            data: key.withUnsafeBytes { Data($0) },
-            accessControl: access
-        )
+
+        // Preferred: gate the key behind Touch ID at the OS level, so even a process running as this
+        // user cannot read it without a live authentication.
+        //
+        // That uses the data-protection keychain, which requires the `keychain-access-groups`
+        // entitlement, which in turn requires an embedded provisioning profile. Builds signed for
+        // general distribution have neither (a Development profile only provisions registered Macs,
+        // which is what made earlier builds refuse to launch elsewhere), and the write fails with
+        // errSecMissingEntitlement.
+        //
+        // Rather than leave face unlock impossible to set up on anyone else's Mac, fall back to an
+        // ordinary device-local keychain item. Be clear about what that costs: this key decrypts the
+        // stored macOS login password, and without the access control any process running as this
+        // user can read it. `isSessionKeyBiometricallyProtected` reports which mode is in effect and
+        // is surfaced in Settings — this is not something to degrade silently.
+        //
+        // A Developer ID provisioning profile (ProvisionsAllDevices) removes the trade entirely and
+        // is the real fix.
+        do {
+            let access = try KeychainManager.makeUserPresenceAccessControl()
+            try KeychainManager.save(
+                account: sessionKeyAccount,
+                data: key.withUnsafeBytes { Data($0) },
+                accessControl: access
+            )
+            setSessionKeyBiometricallyProtected(true)
+        } catch KeychainError.osStatus(errSecMissingEntitlement) {
+            try KeychainManager.save(
+                account: sessionKeyAccount,
+                data: key.withUnsafeBytes { Data($0) }
+            )
+            setSessionKeyBiometricallyProtected(false)
+        }
 
         // Read back through the gated path rather than trusting the write — only a real read proves authentication happened.
         let readBackContext = LAContext()
         readBackContext.localizedReason = reason
         let data = try KeychainManager.read(account: sessionKeyAccount, context: readBackContext)
         setCachedKey(SymmetricKey(data: data))
+    }
+
+    /// Whether the session key is gated behind Touch ID by the keychain itself.
+    ///
+    /// Defaults to `true` so installs that predate the fallback — whose keys really were created
+    /// with the access control — are not mislabelled. It is written explicitly whenever a key is
+    /// minted, so the value always reflects the key that actually exists.
+    private static let biometricFlagKey = "MacID.sessionKeyBiometricallyProtected"
+
+    nonisolated static var isSessionKeyBiometricallyProtected: Bool {
+        UserDefaults.standard.object(forKey: biometricFlagKey) as? Bool ?? true
+    }
+
+    nonisolated static func setSessionKeyBiometricallyProtected(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: biometricFlagKey)
     }
 
     /// Checked without needing the key itself, so this stays answerable precisely when the key can't be read.

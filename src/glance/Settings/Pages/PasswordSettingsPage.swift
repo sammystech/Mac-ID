@@ -90,10 +90,18 @@ struct PasswordSettingsPage: View {
     private var unlockedState: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.rowSpacing) {
             SettingsGroup {
-                SettingsRowContent(title: "Password encrypted") {
-                    Image(systemName: "lock.fill")
+                SettingsRowContent(
+                    title: "Password encrypted",
+                    subtitle: SecureCredentialManager.isSessionKeyBiometricallyProtected
+                        ? "The key is held in the keychain behind Touch ID."
+                        : "The key is stored without a Touch ID requirement on this build.",
+                    subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+                ) {
+                    Image(systemName: SecureCredentialManager.isSessionKeyBiometricallyProtected
+                          ? "lock.fill" : "lock.open.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(SettingsMetrics.textSecondary)
+                        .foregroundStyle(SecureCredentialManager.isSessionKeyBiometricallyProtected
+                                         ? SettingsMetrics.textSecondary : .orange)
                 }
 
                 SettingsGroupDivider()
@@ -121,6 +129,16 @@ struct PasswordSettingsPage: View {
                 SettingsRowContent(title: "Remove password") {
                     HoldToConfirmButton(title: "Remove", action: removePassword)
                 }
+            }
+
+            // Stated plainly rather than buried: this is a real reduction in how well the stored
+            // password is protected, and someone running this build deserves to know without
+            // having to read the source.
+            if !SecureCredentialManager.isSessionKeyBiometricallyProtected {
+                SettingsCaption(text: "This copy of Mac ID isn't signed with an Apple Developer ID, "
+                    + "so macOS won't let it require Touch ID for the key that decrypts your password. "
+                    + "Your password is still encrypted, but another program running under your account "
+                    + "could read that key. A signed release removes this limitation.")
             }
 
             if let statusMessage {
