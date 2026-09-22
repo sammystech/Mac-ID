@@ -18,11 +18,11 @@ struct IntroStepView: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Mac ID")
-                    .font(GlanceTheme.Font.title)
-                    .foregroundStyle(GlanceTheme.textPrimary)
+                    .font(MacIDTheme.Font.title)
+                    .foregroundStyle(MacIDTheme.textPrimary)
                 Text("Face Unlock for Mac")
-                    .font(GlanceTheme.Font.button)
-                    .foregroundStyle(GlanceTheme.textSecondary)
+                    .font(MacIDTheme.Font.button)
+                    .foregroundStyle(MacIDTheme.textSecondary)
 
                 Spacer(minLength: 12)
 
@@ -32,20 +32,20 @@ struct IntroStepView: View {
             }
             .padding(.leading, 4)
             Spacer(minLength: 4)
-            GlanceLogoView()
+            MacIDLogoView()
                 .frame(width: 106, height: 106)
                 .padding(.top, 4)
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
         .onAppear {
             controller.playIntroSweepIfNeeded()
         }
     }
 }
 
-private struct GlanceLogoView: View {
+private struct MacIDLogoView: View {
     var body: some View {
         // Video already bakes in its own white rounded-card background — no extra chrome needed.
         LoopingVideoView(resourceName: "logoanimation")
@@ -60,8 +60,8 @@ struct PermissionsStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Permissions")
-                .font(GlanceTheme.Font.title)
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .font(MacIDTheme.Font.title)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 .padding(.leading, 4)
 
             // Spacer(minLength: 0)
@@ -91,7 +91,7 @@ struct PermissionsStepView: View {
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 }
 
@@ -104,19 +104,19 @@ struct SecurityNoticeStepView: View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 40, weight: .semibold))
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 .padding(.top, 25)
                 .padding(.leading, 4)
 
             Text("Mac ID is not as secure as Apple's FaceID or TouchID.")
-                .font(GlanceTheme.Font.title)
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .font(MacIDTheme.Font.title)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 4)
 
             Text("It uses your Mac's standard webcam and is designed for convenience, not high-security authentication.")
-                .font(GlanceTheme.Font.passwordCaption)
-                .foregroundStyle(GlanceTheme.textSecondary)
+                .font(MacIDTheme.Font.passwordCaption)
+                .foregroundStyle(MacIDTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 4)
                 .padding(.bottom, 10)
@@ -139,7 +139,7 @@ struct SecurityNoticeStepView: View {
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 }
 
@@ -153,13 +153,13 @@ struct PreSetupStepView: View {
             HStack(alignment: .top, spacing: 2) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Set up Face\nRecognition")
-                        .font(GlanceTheme.Font.title)
-                        .foregroundStyle(GlanceTheme.textPrimary)
+                        .font(MacIDTheme.Font.title)
+                        .foregroundStyle(MacIDTheme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text("Follow the directions\nshown on the screen")
-                        .font(GlanceTheme.Font.button)
-                        .foregroundStyle(GlanceTheme.textSecondary)
+                        .font(MacIDTheme.Font.button)
+                        .foregroundStyle(MacIDTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 10)
@@ -181,7 +181,7 @@ struct PreSetupStepView: View {
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 }
 
@@ -199,14 +199,14 @@ struct SelectCameraStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Select camera")
-                .font(GlanceTheme.Font.title)
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .font(MacIDTheme.Font.title)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 .padding(.leading, 4)
                 .padding(.top, 14)
 
             Text("Used for Face enrollment and for unlocking your Mac")
-                .font(GlanceTheme.Font.passwordCaption)
-                .foregroundStyle(GlanceTheme.textSecondary)
+                .font(MacIDTheme.Font.passwordCaption)
+                .foregroundStyle(MacIDTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 4)
 
@@ -232,7 +232,7 @@ struct SelectCameraStepView: View {
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
         .onAppear {
             controller.refreshCameraDevices()
             controller.applyDisplayPinForCameraSelection()
@@ -264,7 +264,7 @@ struct EnrollStepView: View {
                 .padding(OnboardingMetrics.enrollCloseButtonEdgePadding)
             }
         }
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 
     private var showsCloseButton: Bool {
@@ -301,7 +301,7 @@ struct EnrollStepView: View {
                 .animation(.easeInOut(duration: 0.2), value: controller.isTooFar)
 
             if controller.showCheckmark {
-                AnimatedCheckmark(color: GlanceTheme.accent, lineWidth: 8)
+                AnimatedCheckmark(color: MacIDTheme.accent, lineWidth: 8)
                     .frame(width: 70, height: 59)
                     .transition(.opacity)
                     .padding(.top, 4)
@@ -315,7 +315,7 @@ struct EnrollStepView: View {
 
     private var instructionLabel: some View {
         Text(controller.enrollmentInstruction)
-            .font(GlanceTheme.Font.instruction)
+            .font(MacIDTheme.Font.instruction)
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
             .lineLimit(2)
@@ -381,13 +381,13 @@ struct NameStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Name this face")
-                .font(GlanceTheme.Font.title)
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .font(MacIDTheme.Font.title)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 .padding(.leading, 4)
 
             Text("Used to tell enrolled faces apart when more than one person is set up on this Mac.")
-                .font(GlanceTheme.Font.passwordCaption)
-                .foregroundStyle(GlanceTheme.textSecondary)
+                .font(MacIDTheme.Font.passwordCaption)
+                .foregroundStyle(MacIDTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 4)
 
@@ -399,8 +399,8 @@ struct NameStepView: View {
 
             if let error = controller.nameError {
                 Text(error)
-                    .font(GlanceTheme.Font.rowDetail)
-                    .foregroundStyle(GlanceTheme.statusDenied)
+                    .font(MacIDTheme.Font.rowDetail)
+                    .foregroundStyle(MacIDTheme.statusDenied)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -415,7 +415,7 @@ struct NameStepView: View {
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 }
 
@@ -429,13 +429,13 @@ struct PasswordStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Enter your password")
-                .font(GlanceTheme.Font.title)
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .font(MacIDTheme.Font.title)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 .padding(.leading, 4)
 
             Text("Your password is required to unlock your Mac. It is encrypted and securely stored on your device. Mac ID works entirely offline, so your password never leaves your Mac.")
-                .font(GlanceTheme.Font.passwordCaption)
-                .foregroundStyle(GlanceTheme.textSecondary)
+                .font(MacIDTheme.Font.passwordCaption)
+                .foregroundStyle(MacIDTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 4)
 
@@ -448,8 +448,8 @@ struct PasswordStepView: View {
 
             if let error = controller.passwordError {
                 Text(error)
-                    .font(GlanceTheme.Font.rowDetail)
-                    .foregroundStyle(GlanceTheme.statusDenied)
+                    .font(MacIDTheme.Font.rowDetail)
+                    .foregroundStyle(MacIDTheme.statusDenied)
             }
 
             // Spacer(minLength: 0)
@@ -469,7 +469,7 @@ struct PasswordStepView: View {
         }
         .onboardingContentPadding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 }
 
@@ -479,8 +479,8 @@ struct CompleteStepView: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("You're all set")
-                .font(GlanceTheme.Font.title)
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .font(MacIDTheme.Font.title)
+                .foregroundStyle(MacIDTheme.textPrimary)
             Spacer(minLength: 4)
             AnimatedCheckmark(color: .white, lineWidth: 5)
                 .frame(width: 20, height: 15)
@@ -488,6 +488,6 @@ struct CompleteStepView: View {
         .onboardingContentHorizontalPadding()
         .padding(.top, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(GlanceTheme.panel)
+        .background(MacIDTheme.panel)
     }
 }

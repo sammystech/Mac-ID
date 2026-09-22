@@ -652,6 +652,37 @@ Two directories, deliberately separate: `releases/` holds only the update zips a
 because `generate_appcast` refuses two archives carrying the same bundle version; `dist/` holds the
 hand-install DMGs.
 
+### Published
+
+`sammystech/Mac-ID` holds v1.2 with the DMG, the Sparkle zip and the appcast. The repo is **private**
+by choice, which means the feed 404s for everyone and in-app "Check for Updates" does nothing — the
+right trade while the app is Development-signed and cannot run on anyone else's Mac anyway. Flipping
+to public is the single action that reactivates updates:
+
+```bash
+gh repo edit sammystech/Mac-ID --visibility public --accept-visibility-change-consequences
+```
+
+The feed was verified end to end during a brief public window, so nothing else needs changing.
+
+Originally released with the DMG, the Sparkle zip and the appcast.
+The feed was then checked the way a user's copy sees it — anonymously, over plain HTTPS:
+
+```
+appcast fetches          HTTP 200
+enclosure URL resolves    HTTP 200
+declared length           84,606,591  ==  server content-length
+hosted zip sha256         e0e94ffc…   ==  the locally signed file
+```
+
+Two things that cost a round of debugging and are worth remembering:
+
+- **Release asset filenames cannot contain spaces.** `Mac ID 1.2.dmg` was rejected with HTTP 400 by
+  GitHub's upload API. `release.sh` now names DMGs `Mac-ID-<version>.dmg`.
+- Large uploads reset on this connection. Create the release first, then upload assets individually
+  with retries — and check `gh`'s real exit status, because piping it through `tail` masks the
+  failure and makes a rejected upload look successful.
+
 ### Verified end to end
 
 A full `./tools/release.sh 1.2` run produced:
@@ -668,6 +699,323 @@ the real archive verifies, and the same signature against a different archive is
 
 The run also correctly warned that the build is Development-signed and therefore yours-only, and
 confirmed `Sparkle.framework`'s Team ID matches the app's.
+
+## 14. Licensing, and what selling this actually requires
+
+### Getting rid of "allow anyway"
+
+Nothing in the code causes that prompt — it is entirely about how the app is signed, and there is no
+setting that removes it. It needs a **paid Apple Developer Program membership** ($99/yr):
+
+1. Enrol at developer.apple.com/programs
+2. Xcode → Settings → Accounts → Manage Certificates → **+** → **Developer ID Application**
+3. Rebuild with it, then `xcrun notarytool submit --wait` and `xcrun stapler staple`
+
+Until then the build is not just "unsigned-looking" — its provisioning profile names exactly one
+device and expires 2026-09-24, so it cannot run on anyone else's Mac at all and stops running on
+this one in a week.
+
+### One condition on selling it
+
+Mac ID is a derivative of glance, which is **MIT-licensed**. MIT permits selling, but requires the
+original copyright notice and licence text to ship with the app. That is a condition, not a
+courtesy. It belongs in an acknowledgements screen or in the bundle.
+
+### The licence system
+
+Permanent unlock, verified offline, no server. A key is an Ed25519 signature over an 11-byte
+payload; the app holds only the **public** key.
+
+That asymmetry is the point. A checksum or an HMAC would require a secret capable of *producing*
+valid keys to ship inside the binary, where anyone can extract it and mint their own. With a
+signature there is no such secret in the app — minting requires a private key that never leaves
+this machine.
+
+```
+macid-license init                create the keypair (once, ever)
+macid-license mint [note]         mint one key
+macid-license mint-batch 500      mint 500 as CSV, for bulk upload to a store
+macid-license verify <key>        check a key
+```
+
+Keys look like this, Crockford Base32 so I/L/O/U can't be misread — the decoder folds a typed `O`
+back to `0`, so a buyer retyping by hand still gets in:
+
+```
+MACID-043T9M-9ZXK52-…  (20 groups)
+```
+
+They are long because they have to be: the shortest secure signature CryptoKit offers is 64 bytes.
+Shortening it would mean either a weaker scheme or a secret in the binary. The UI accepts a paste
+and wraps across lines.
+
+**Verified:** keys minted by the tool verify in the app; a single altered character is rejected;
+100 of 100 minted keys were unique.
+
+### What this does not do
+
+It cannot stop someone patching the check out of the binary. Every offline licence scheme has this
+property, and no amount of obfuscation changes it — it raises the effort, it does not close the
+hole. The honest framing is that this stops casual sharing among ordinary buyers, which is what
+most of the money is. Server activation would allow revocation and install limits, at the cost of
+hosting and of needing a network at unlock time — which, at a lock screen, is the least reliable
+moment there is.
+
+### Back up the signing key
+
+```bash
+security find-generic-password -s com.samuelmittman.macid.licensing -w
+```
+
+Lose it and you can never issue another key that existing copies accept; replacing the public key
+invalidates every licence already sold.
+
+## 15. Why the session kept locking
+
+Face unlock would quietly stop working, and the only cure was buried in Settings.
+
+The session key that decrypts the stored password is held **in memory only** —
+`SecureCredentialManager._cachedKey`. It has to be: the lock screen has no UI that could host a
+Touch ID prompt, so the password must be decryptable without interaction at the moment of unlock.
+One Touch ID unwraps the key, and it stays in RAM.
+
+The consequence nobody had wired up: every launch starts with an empty cache, and nothing
+re-acquired the key automatically. `FaceUnlockCoordinator` refuses to arm while the session is
+locked — silently. So after every reboot, quit, or update, face unlock was dead until you went and
+found the unlock button by hand, and the first lock screen after a reboot is exactly where you most
+want it working.
+
+It was not the idle timer. That has a **minimum of one day** and is currently set to seven, so it
+was never the cause — the cause was restarts, of which this project has had a great many today.
+
+**Fixed:** the app now asks for Touch ID once at launch, but only when it will actually be used —
+face unlock enabled, a password stored, and the session not already open. Otherwise it stays quiet
+rather than prompting for a fingerprint it has no use for.
+
+### The remaining prompt, and what removing it would cost
+
+One Touch ID per launch is still one per reboot. Removing it entirely means persisting the session
+key in the keychain **without** the `.userPresence` requirement — and that key is the only thing
+standing between a process running as you and your macOS login password. Today, reading it demands
+your fingerprint. Without that flag, it does not.
+
+That is a real trade, not a formality, so it is not on by default and I have not made it silently.
+If you want it, say so and it is a small change: a second ungated copy of the key, read at launch,
+behind a setting that says plainly what it gives up.
+
+## 16. "It only works if I hold still exactly where I enrolled"
+
+I went looking for a better model and found the model was not the problem. Measured on 120 LFW
+identities through this app's own pipeline — three photos enrolled per person, *different* photos
+used as probes (so different expression, lighting and day), plus a variant set with a quarter of the
+face blacked out:
+
+```
+rule                                clean    occluded
+centroid AND best sample  (was)     97.5%      82.2%
+centroid only                       98.7%      89.8%
+best matching sample only           97.5%      84.0%
+either centroid or best sample      98.7%      91.6%
+```
+
+Two things were throwing away good recognitions, and neither was the embedding model.
+
+**The matching rule was the strictest of the four possible.** It required a frame to clear the
+threshold against the averaged template *and* against the closest individual enrolled sample. Those
+two answer different questions — the centroid is steadier for a face close to how you enrolled, the
+closest sample is what catches a live frame resembling one particular enrolled pose rather than the
+average of all nine — and a face that clearly satisfies one should not be refused for failing the
+other. Now either suffices.
+
+**The threshold was too strict**, and had been calibrated before occlusion was ever measured:
+
+```
+threshold   clean TAR   occluded TAR   impostors accepted (of ~55,000)
+   0.35        100%        98.7%            5
+   0.40        100%        96.4%            0
+   0.45       99.2%        91.6%            0      <- was here
+   0.50       97.9%        80.9%            0
+```
+
+0.45 refused nearly one attempt in five with part of the face covered, and bought no measurable
+security over 0.40 — which accepted **zero** of ~55,000 impostor comparisons. 0.40 is the lowest
+value that still admits none, so that is the new default. Below it, impostors start getting through,
+which is why I did not go further even though it would have looked better.
+
+**Flip augmentation** was added: the aligned face and its mirror are both embedded and averaged,
+standard practice in face recognition. Worth +1.3 points on the occluded case for one extra Neural
+Engine inference.
+
+**Net effect, same data:**
+
+```
+                 clean    occluded
+before           97.5%      82.2%
+after            100%       96.4%     with zero impostors accepted
+```
+
+### What it cost
+
+The extra inference lowers scan-loop throughput from 94% to 81% of a 30fps camera (28.3 -> 24.3
+processed frames per second). Still far above the 59% this started at, and 24fps is ample — three
+frames of liveness takes 125ms.
+
+### No re-enrollment needed
+
+Flip augmentation changes the embedding, so a gallery enrolled without it could in principle no
+longer match. Measured: it scores **identically** (100% clean / 96.4% occluded either way). The
+threshold calibration is therefore versioned separately from the model identity, so re-tuning a
+number can never cost you your enrolled face.
+
+### What is still not solved
+
+Detection, not recognition, is now the weak link under occlusion: **15 of 240 occluded images
+(6%) failed face detection outright** — Vision never found a face to recognise. No embedding model
+can fix that, because nothing reaches the embedder. If a quarter of your face is covered and it does
+not react at all, that is this, not the matcher.
+
+A stronger backbone (InsightFace's `glintr100`, ResNet-100 trained on Glint360K) is the next step
+available if you want it, but the measurements say the gain would be small next to what the policy
+fix just recovered — and it would roughly triple the model size.
+
+## 17. glintr100 — measured, then adopted
+
+### What it was, what it is now
+
+```
+was   ArcFace w600k_r50    ResNet-50,  WebFace600K,   53 conv,  83 MB,  5.6 ms
+now   ArcFace glintr100    ResNet-100, Glint360K,    103 conv, 125 MB,  9.6 ms
+```
+
+AdaFace (IR-101 / WebFace12M) would likely be stronger still, but every mirror of its weights is
+gated behind a HuggingFace login, so it could not be obtained or verified here. glintr100 is the
+strongest model I could actually fetch, convert and measure.
+
+### Measured, not assumed
+
+Same protocol as §16: 120 LFW identities, three photos enrolled each, different photos as probes
+(so different lighting, pose and expression), plus a set with a quarter of the face blacked out.
+54,978 impostor comparisons.
+
+```
+                          embed    occluded worst case    occluded TAR@0.40
+r50 + flip TTA           11.2 ms        0.373                  99.6%
+glintr100, no flip        9.6 ms        0.429                 100.0%
+glintr100 + flip TTA     19.3 ms        0.430                 100.0%
+```
+
+Two things fell out of this that a reputation-based swap would have missed:
+
+**glintr100 without flip augmentation beats r50 with it, and costs less.** The worst-case occluded
+score — the attempt most likely to fail — rises from 0.373 to 0.429.
+
+**Flip augmentation is now pointless.** It was worth +1.3 points on r50; on glintr100 it moves the
+worst case from 0.429 to 0.430 while doubling embedding cost. It has been removed. The stronger
+backbone already captures what the mirror pass was recovering.
+
+### Threshold
+
+```
+threshold   clean TAR   occluded TAR   impostors accepted (of 54,978)
+   0.38        100%         100%             1
+   0.40        100%         100%             1
+   0.42        100%         100%             0
+   0.50        100%        97.3%             0
+```
+
+0.42: 100% on both sets, zero false accepts. The accuracy/security tension that dominated the
+previous model has largely disappeared in this range — there is no longer a price to pay for the
+safe choice.
+
+### Glasses, lighting, position
+
+These are not a separate feature; they are what LFW probes *are*. Each probe is a different
+photograph of that person — different day, light, expression, angle, and for many subjects glasses
+on in one and off in another. 100% clean TAR is measured across exactly that variation.
+
+### Printed photos
+
+Already built (§6) and on by default at **Standard**. It is pixel-domain — moiré, specular deficit —
+so it is unaffected by the model change and needed no re-measurement.
+
+### You must re-enroll
+
+Unlike the threshold work in §16, this genuinely changes the embedding space: `modelIdentifier` is
+now `arcface-glintr100-v1`, so `SecureFaceStore` correctly refuses to compare old samples against
+new ones. Your existing enrollment is invalid — Settings → Your Face, remove and re-enroll.
+
+### A caveat on today's speed numbers
+
+Throughput measured during this session is not comparable to §12's. The machine was running three
+`ffmpeg` jobs at ~90% CPU each with a load average of 258, and the scan loop measured 42-53% of
+camera frames for **both** models — including w600k_r50, which measured 94% on an idle machine. Under
+identical conditions the two backbones are within noise of each other. The accuracy figures above are
+unaffected, being deterministic rather than timed.
+
+## 18. Speed work, and updates that actually reach people
+
+### Where the time really is
+
+Profiling under load was useless — the machine was running three `ffmpeg` montage renders at ~90%
+CPU each, load average 265, and stage timings swung 3-4x between runs. One "finding" (a 31ms crop
+render) evaporated on re-measurement at 8ms. Nothing timed in that state is worth acting on.
+
+But the arithmetic settles it without a stopwatch. Three frames of recognition — what a Light-mode
+unlock needs — cost roughly 75ms. Getting the *first* frame costs:
+
+```
+lock event
+  +300 ms   settle delay, before anything else ran
+  +250 ms   arm animation
+  +300-800 ms  AVCaptureSession.startRunning() before it yields a usable frame
+```
+
+The camera dominated by an order of magnitude, and 550ms of it was pure scheduling — the hardware
+had not even been asked to start. `startRunning()` now begins the moment a lock or wake event
+arrives, in parallel with both delays, gated on cheap stable preconditions (unlock enabled, licensed,
+session open, password stored). Every path in `evaluateTrigger` that then decides *not* to scan calls
+`abandonPrewarm()`, so a speculatively started camera is never left running — that matters, because
+a live session lights the recording indicator.
+
+The rectangle detector also moved from every 3rd processed frame to every 5th. It is the most
+expensive thing on the path (~10ms) and answers a question that cannot change between frames.
+
+### Timing is now measurable
+
+Guessing at this twice was enough. The scan logs its own timing:
+
+```bash
+log stream --predicate 'subsystem == "com.samuelmittman.macid"' --info
+```
+
+giving "camera: first frame N ms after the scan began" and "matched after N frames, N ms of
+recognition, N ms total" — so the camera term and the recognition term can be seen separately
+rather than inferred.
+
+### Updates are live
+
+`sammystech/Mac-ID` is public again (required — Sparkle fetches the feed with no credentials, so a
+private repo 404s for everyone), and **v1.3 is published** with the DMG, the Sparkle payload and the
+appcast. Verified as an anonymous client:
+
+```
+feed                 HTTP 200, advertises 1.3
+update payload       HTTP 200, declared length == served length
+DMG                  HTTP 200
+hosted zip sha256    eac89f7e…  ==  the locally signed file
+```
+
+So the loop is real: `./tools/release.sh 1.4`, upload, and every installed copy that presses
+**Check for Updates** is offered it and can install it.
+
+### The one thing still missing
+
+Your friend can download the DMG today. He cannot **run** it. It is signed with an Apple Development
+certificate whose provisioning profile names one device — yours — so his Mac refuses it before it
+launches, and Sparkle would hit the same wall on the install step of any update.
+
+That needs the paid Apple Developer Program: a Developer ID Application certificate, a rebuild, and
+notarization. It is the last remaining gap, and it is the only one I cannot close from here.
 
 ---
 

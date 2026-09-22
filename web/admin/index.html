@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac ID · Licence admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --violet:#6D4AFF; --violet-lit:#8E72FF; --indigo:#4A2FD0;
+  --ink:#0B0A12; --text:#F4F3FA; --dim:#A8A4C0; --faint:#726E8C;
+  --glass:rgba(255,255,255,.055); --glass-hi:rgba(255,255,255,.10);
+  --edge:rgba(255,255,255,.12); --ok:#46E39B; --warn:#FFC454; --bad:#FF6B7A;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:Inter,-apple-system,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;line-height:1.5;min-height:100vh}
+body::before{content:"";position:fixed;inset:-20vh -10vw;z-index:-1;pointer-events:none;
+  background:radial-gradient(45vw 45vw at 10% 0%,rgba(109,74,255,.32),transparent 60%),
+             radial-gradient(40vw 40vw at 92% 30%,rgba(38,180,255,.16),transparent 62%);filter:blur(20px)}
+.glass{background:linear-gradient(150deg,var(--glass-hi),var(--glass));border:1px solid var(--edge);
+  border-radius:20px;backdrop-filter:blur(26px) saturate(175%);-webkit-backdrop-filter:blur(26px) saturate(175%);
+  box-shadow:0 1px 0 rgba(255,255,255,.13) inset,0 22px 52px -22px rgba(0,0,0,.7);position:relative;overflow:hidden}
+.glass::before{content:"";position:absolute;inset:0 0 auto 0;height:50%;
+  background:linear-gradient(180deg,rgba(255,255,255,.14),transparent);pointer-events:none}
+.wrap{max-width:1140px;margin:0 auto;padding:30px 24px 70px}
+header{display:flex;align-items:center;gap:13px;margin-bottom:8px}
+header svg{width:31px;height:31px}
+h1{font-size:1.32rem;font-weight:660;letter-spacing:-.02em}
+.warnbar{margin:16px 0 26px;padding:12px 17px;border-radius:13px;font-size:13.5px;
+  background:rgba(255,196,84,.10);border:1px solid rgba(255,196,84,.28);color:#FFD08A}
+.cols{display:grid;grid-template-columns:370px 1fr;gap:20px;align-items:start}
+@media (max-width:900px){.cols{grid-template-columns:1fr}}
+.panel{padding:24px}
+h2{font-size:.83rem;font-weight:660;letter-spacing:.12em;text-transform:uppercase;color:var(--violet-lit);margin-bottom:17px}
+label{display:block;font-size:12.5px;color:var(--dim);margin:13px 0 6px;font-weight:500}
+input,textarea,select{width:100%;padding:11px 13px;border-radius:11px;background:rgba(0,0,0,.30);
+  border:1px solid var(--edge);color:var(--text);font:inherit;font-size:14px;outline:none;transition:.16s}
+input:focus,textarea:focus,select:focus{border-color:var(--violet-lit);background:rgba(0,0,0,.42)}
+textarea{resize:vertical;min-height:58px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:12px;
+  font-weight:600;font-size:14px;border:1px solid transparent;cursor:pointer;transition:.18s;font-family:inherit}
+.btn-primary{background:linear-gradient(165deg,var(--violet-lit),var(--indigo));color:#fff;
+  border-color:rgba(255,255,255,.2);box-shadow:0 1px 0 rgba(255,255,255,.28) inset,0 12px 28px -12px rgba(109,74,255,.8);width:100%;margin-top:20px}
+.btn-primary:hover{transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-sm{padding:6px 11px;font-size:12.5px;border-radius:9px;background:rgba(255,255,255,.08);
+  color:var(--dim);border-color:var(--edge)}
+.btn-sm:hover{background:rgba(255,255,255,.14);color:var(--text)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:20px}
+.stat{padding:15px 17px;border-radius:15px;background:rgba(255,255,255,.05);border:1px solid var(--edge)}
+.stat b{display:block;font-size:1.6rem;font-weight:670;letter-spacing:-.02em}
+.stat span{font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em}
+.toolbar{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+.toolbar input{flex:1}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;padding:9px 11px;color:var(--faint);font-weight:600;font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--edge)}
+td{padding:11px;border-bottom:1px solid rgba(255,255,255,.055);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr.revoked{opacity:.42}
+.key{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11px;color:var(--dim);
+  word-break:break-all;line-height:1.35;max-width:270px}
+.who b{display:block;font-weight:600}
+.who span{font-size:12px;color:var(--faint)}
+.tag{display:inline-block;padding:2px 8px;border-radius:7px;font-size:11px;font-weight:600}
+.tag.free{background:rgba(70,227,155,.16);color:var(--ok)}
+.tag.paid{background:rgba(142,114,255,.18);color:var(--violet-lit)}
+.tag.void{background:rgba(255,107,122,.16);color:var(--bad)}
+.result{margin-top:18px;padding:17px;border-radius:14px;background:rgba(70,227,155,.09);
+  border:1px solid rgba(70,227,155,.3)}
+.result .key{color:#CFFBE4;max-width:none;font-size:11.5px;margin:9px 0 11px}
+.msg{margin-top:13px;font-size:13px;padding:10px 13px;border-radius:11px;display:none}
+.msg.err{display:block;background:rgba(255,107,122,.12);border:1px solid rgba(255,107,122,.32);color:#FFB3BC}
+.empty{padding:44px 20px;text-align:center;color:var(--faint);font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg viewBox="0 0 480 480"><rect width="480" height="480" rx="108" fill="url(#g)"/>
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8E72FF"/><stop offset="1" stop-color="#4A2FD0"/></linearGradient></defs>
+      <g stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".95">
+        <path d="M120 186 V150 A30 30 0 0 1 150 120 H186"/><path d="M294 120 H330 A30 30 0 0 1 360 150 V186"/>
+        <path d="M120 294 V330 A30 30 0 0 0 150 360 H186"/><path d="M294 360 H330 A30 30 0 0 0 360 330 V294"/></g>
+      <circle cx="240" cy="216" r="40" fill="#fff"/>
+      <path d="M180 320 C180 282 207 254 240 254 C273 254 300 282 300 320 Z" fill="#fff"/></svg>
+    <h1>Licence admin</h1>
+  </header>
+  <div class="warnbar">
+    Local only. This page mints licences using the private signing key in your keychain — never put it on a network or behind a tunnel.
+  </div>
+
+  <div class="cols">
+    <div class="panel glass">
+      <h2>Issue a licence</h2>
+      <form id="form">
+        <label for="name">Name</label>
+        <input id="name" required autocomplete="off" placeholder="Jane Smith">
+        <label for="email">Email</label>
+        <input id="email" type="email" required autocomplete="off" placeholder="jane@example.com">
+        <div class="row">
+          <div>
+            <label for="price">Price</label>
+            <select id="price">
+              <option value="4.99">$4.99 — paid</option>
+              <option value="0">Free</option>
+            </select>
+          </div>
+        </div>
+        <label for="note">Note <span style="color:var(--faint)">(optional)</span></label>
+        <textarea id="note" placeholder="Beta tester, refund replacement, …"></textarea>
+        <button class="btn btn-primary" id="submit" type="submit">Generate licence</button>
+      </form>
+      <div class="msg err" id="err"></div>
+      <div class="result" id="result" style="display:none">
+        <div style="font-size:12.5px;color:var(--ok);font-weight:600">Licence created for <span id="rname"></span></div>
+        <div class="key" id="rkey"></div>
+        <button class="btn btn-sm" id="copy">Copy key</button>
+        <button class="btn btn-sm" id="copymail">Copy email text</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="stats">
+        <div class="stat glass"><b id="s-total">0</b><span>Issued</span></div>
+        <div class="stat glass"><b id="s-paid">0</b><span>Paid</span></div>
+        <div class="stat glass"><b id="s-free">0</b><span>Free</span></div>
+      </div>
+      <div class="panel glass">
+        <div class="toolbar">
+          <input id="search" placeholder="Search name, email or note…" autocomplete="off">
+          <button class="btn btn-sm" id="csv">Export CSV</button>
+        </div>
+        <div id="tablewrap"><div class="empty">No licences issued yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let rows = [];
+
+async function refresh() {
+  rows = await (await fetch('/api/licenses')).json();
+  render();
+}
+
+function render() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const shown = rows.filter(r => !q ||
+    (r.name + ' ' + r.email + ' ' + (r.note || '')).toLowerCase().includes(q));
+
+  document.getElementById('s-total').textContent = rows.filter(r => !r.revoked).length;
+  document.getElementById('s-paid').textContent  = rows.filter(r => !r.revoked && r.price !== '0').length;
+  document.getElementById('s-free').textContent  = rows.filter(r => !r.revoked && r.price === '0').length;
+
+  const wrap = document.getElementById('tablewrap');
+  if (!shown.length) {
+    wrap.innerHTML = '<div class="empty">' +
+      (rows.length ? 'Nothing matches that search.' : 'No licences issued yet.') + '</div>';
+    return;
+  }
+  wrap.innerHTML = '<table><thead><tr><th>Who</th><th>Licence</th><th>Issued</th><th></th></tr></thead><tbody>' +
+    shown.slice().reverse().map(r => `
+      <tr class="${r.revoked ? 'revoked' : ''}">
+        <td class="who"><b>${esc(r.name)}</b><span>${esc(r.email)}</span>
+          ${r.note ? `<span style="display:block;margin-top:3px">${esc(r.note)}</span>` : ''}</td>
+        <td><div class="key">${esc(r.key)}</div>
+          <span class="tag ${r.revoked ? 'void' : (r.price === '0' ? 'free' : 'paid')}">
+            ${r.revoked ? 'void' : (r.price === '0' ? 'free' : '$' + r.price)}</span></td>
+        <td style="color:var(--faint);font-size:12.5px">${(r.issued || '').replace('T', ' ').replace('+00:00', '')}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" onclick="copyKey('${r.ref}')">Copy</button>
+          <button class="btn btn-sm" onclick="toggle('${r.ref}')">${r.revoked ? 'Restore' : 'Void'}</button></td>
+      </tr>`).join('') + '</tbody></table>';
+}
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function copyKey(ref) {
+  const r = rows.find(x => x.ref === ref);
+  if (r) navigator.clipboard.writeText(r.key);
+}
+
+async function toggle(ref) {
+  await fetch('/api/revoke', { method: 'POST', body: JSON.stringify({ ref }) });
+  refresh();
+}
+
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('csv').addEventListener('click', () => location.href = '/api/export.csv');
+
+document.getElementById('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('submit'), err = document.getElementById('err');
+  err.classList.remove('err'); err.textContent = '';
+  btn.disabled = true; btn.textContent = 'Generating…';
+
+  const body = {
+    name: document.getElementById('name').value,
+    email: document.getElementById('email').value,
+    price: document.getElementById('price').value,
+    note: document.getElementById('note').value,
+  };
+  let res = await fetch('/api/issue', { method: 'POST', body: JSON.stringify(body) });
+  let data = await res.json();
+
+  if (res.status === 409) {
+    if (confirm(data.message)) {
+      body.confirm_duplicate = true;
+      res = await fetch('/api/issue', { method: 'POST', body: JSON.stringify(body) });
+      data = await res.json();
+    } else {
+      btn.disabled = false; btn.textContent = 'Generate licence'; return;
+    }
+  }
+
+  btn.disabled = false; btn.textContent = 'Generate licence';
+  if (!res.ok) { err.classList.add('err'); err.textContent = data.error || 'Something went wrong.'; return; }
+
+  document.getElementById('rname').textContent = data.name;
+  document.getElementById('rkey').textContent = data.key;
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('copy').onclick = () => navigator.clipboard.writeText(data.key);
+  document.getElementById('copymail').onclick = () => navigator.clipboard.writeText(
+`Hi ${data.name.split(' ')[0]},
+
+Here's your Mac ID licence key:
+
+${data.key}
+
+To activate: open Mac ID, go to Settings → About, paste the key, and press Activate.
+
+It never expires and it's yours alone. Keep this email in case you reinstall.`);
+  document.getElementById('form').reset();
+  refresh();
+});
+
+refresh();
+</script>
+</body>
+</html>

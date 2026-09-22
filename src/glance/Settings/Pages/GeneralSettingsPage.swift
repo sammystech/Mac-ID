@@ -8,7 +8,7 @@ import SwiftUI
 
 struct GeneralSettingsPage: View {
     @Bindable var coordinator: FaceUnlockCoordinator
-    @Bindable private var settings = GlanceSettings.shared
+    @Bindable private var settings = AppSettings.shared
 
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
     @State private var launchAtLoginError: String?
@@ -32,7 +32,7 @@ struct GeneralSettingsPage: View {
     var body: some View {
         SettingsGroup {
             SettingsRowContent(title: "Launch at login") {
-                GlanceToggle(isOn: Binding(
+                MacIDToggle(isOn: Binding(
                     get: { launchAtLoginEnabled },
                     set: { newValue in
                         launchAtLoginEnabled = newValue
@@ -48,7 +48,7 @@ struct GeneralSettingsPage: View {
             }
             SettingsGroupDivider()
             SettingsRowContent(title: "Enable Face Unlock") {
-                GlanceToggle(isOn: $coordinator.isEnabled)
+                MacIDToggle(isOn: $coordinator.isEnabled)
             }
             SettingsGroupDivider()
             UnlockTriggerPicker(selection: $settings.unlockTriggers, isEnabled: coordinator.isEnabled)
@@ -86,25 +86,25 @@ struct GeneralSettingsPage: View {
             SettingsSectionTitle(text: "Behaviour")
             SettingsGroup {
                 SettingsRowContent(title: "Retry on notch hover") {
-                    GlanceToggle(isOn: $settings.retryOnHover)
+                    MacIDToggle(isOn: $settings.retryOnHover)
                 }
                 SettingsGroupDivider()
                 SettingsRowContent(title: "Auto retry once after failure") {
-                    GlanceToggle(isOn: $settings.autoRetryOnce)
+                    MacIDToggle(isOn: $settings.autoRetryOnce)
                 }
                 SettingsGroupDivider()
                 SettingsRowContent(title: "Haptic feedback") {
-                    GlanceToggle(isOn: $settings.hapticFeedbackEnabled)
+                    MacIDToggle(isOn: $settings.hapticFeedbackEnabled)
                 }
                 SettingsGroupDivider()
                 SettingsSteppedSliderRowContent(
                     title: "Face detection duration",
                     valueLabel: "\(settings.faceDetectionSeconds)s",
                     index: Binding(
-                        get: { Double(settings.faceDetectionSeconds - GlanceSettings.faceDetectionRange.lowerBound) },
-                        set: { settings.faceDetectionSeconds = GlanceSettings.faceDetectionRange.lowerBound + Int($0.rounded()) }
+                        get: { Double(settings.faceDetectionSeconds - AppSettings.faceDetectionRange.lowerBound) },
+                        set: { settings.faceDetectionSeconds = AppSettings.faceDetectionRange.lowerBound + Int($0.rounded()) }
                     ),
-                    stopCount: GlanceSettings.faceDetectionRange.count
+                    stopCount: AppSettings.faceDetectionRange.count
                 )
             }
         }
@@ -113,7 +113,7 @@ struct GeneralSettingsPage: View {
             SettingsSectionTitle(text: "Animation")
             SettingsGroup {
                 SettingsRowContent(title: "Show animation") {
-                    GlanceToggle(isOn: $settings.showUnlockAnimation)
+                    MacIDToggle(isOn: $settings.showUnlockAnimation)
                 }
                 SettingsGroupDivider()
                 UnlockAnimationPicker(
@@ -138,7 +138,7 @@ struct GeneralSettingsPage: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 12))
-            .foregroundStyle(GlanceTheme.accent)
+            .foregroundStyle(MacIDTheme.accent)
         }
     }
 

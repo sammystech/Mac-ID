@@ -1,5 +1,5 @@
 //
-//  GlanceTheme.swift
+//  MacIDTheme.swift
 //  glance
 //
 //  Color and type tokens, kept here so OnboardingStepViews/OnboardingControls don't
@@ -8,7 +8,7 @@
 
 import SwiftUI
 
-enum GlanceTheme {
+enum MacIDTheme {
     private static let accentRGB = (r: 0x34 / 255.0, g: 0x99 / 255.0, b: 0xFF / 255.0)
     static let accent = Color(red: accentRGB.r, green: accentRGB.g, blue: accentRGB.b)
 

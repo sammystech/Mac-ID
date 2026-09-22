@@ -16,7 +16,7 @@ import AVFoundation
 import AppKit
 import SwiftUI
 
-/// `String`-backed so `GlanceSettings.onboardingResumeStep` can persist it directly by name.
+/// `String`-backed so `AppSettings.onboardingResumeStep` can persist it directly by name.
 enum OnboardingStep: String, CaseIterable {
     case intro
     case permissions
@@ -157,13 +157,13 @@ final class OnboardingController {
         didSet {
             guard isFirstRunFlow else { return }
             if step == .complete {
-                GlanceSettings.shared.hasCompletedOnboarding = true
+                AppSettings.shared.hasCompletedOnboarding = true
                 // Normal onboarding now passes through `.securityNotice` on its own —
                 // completing it here means the standalone post-update notice never needs to.
-                GlanceSettings.shared.hasAcknowledgedSecurityNotice = true
-                GlanceSettings.shared.onboardingResumeStep = nil
+                AppSettings.shared.hasAcknowledgedSecurityNotice = true
+                AppSettings.shared.onboardingResumeStep = nil
             } else {
-                GlanceSettings.shared.onboardingResumeStep = step.resumeTarget
+                AppSettings.shared.onboardingResumeStep = step.resumeTarget
             }
         }
     }
@@ -588,7 +588,7 @@ final class OnboardingController {
             // turn as the panel-resize transition, stealing frames from the spring animation.
             Task { @MainActor [weak self] in self?.beginEnrollment() }
         case .complete where isPostUpdateNotice:
-            GlanceSettings.shared.hasAcknowledgedSecurityNotice = true
+            AppSettings.shared.hasAcknowledgedSecurityNotice = true
             scheduleCompletionDismiss()
         default: break
         }
@@ -750,7 +750,7 @@ final class OnboardingController {
     /// Text shown inside the pill: the explicitly chosen device's name, or the resolved
     /// system default's name suffixed "(Default)" when nothing's been picked yet.
     var cameraSelectionLabel: String {
-        if let id = GlanceSettings.shared.defaultCameraID,
+        if let id = AppSettings.shared.defaultCameraID,
            let device = cameraDevices.first(where: { $0.id == id }) {
             return device.name
         }
@@ -762,7 +762,7 @@ final class OnboardingController {
     /// settings page and `CameraDeviceCatalog.resolvedDevice()` read — then re-checks
     /// whether the panel should follow the built-in display.
     func selectCamera(id: String?) {
-        GlanceSettings.shared.defaultCameraID = id
+        AppSettings.shared.defaultCameraID = id
         applyDisplayPinForCameraSelection()
     }
 
@@ -778,16 +778,16 @@ final class OnboardingController {
         let isBuiltIn = resolveSelectedCameraDevice()?.deviceType == .builtInWideAngleCamera
         if isBuiltIn {
             guard let builtInScreen = NSScreen.screens.first(where: { $0.isBuiltIn }) else { return }
-            GlanceSettings.shared.preferredDisplayID = builtInScreen.stableDisplayID
-            GlanceSettings.shared.preferredDisplayName = builtInScreen.localizedName
+            AppSettings.shared.preferredDisplayID = builtInScreen.stableDisplayID
+            AppSettings.shared.preferredDisplayName = builtInScreen.localizedName
         } else {
-            GlanceSettings.shared.preferredDisplayID = nil
-            GlanceSettings.shared.preferredDisplayName = nil
+            AppSettings.shared.preferredDisplayID = nil
+            AppSettings.shared.preferredDisplayName = nil
         }
     }
 
     private func resolveSelectedCameraDevice() -> AVCaptureDevice? {
-        if let id = GlanceSettings.shared.defaultCameraID {
+        if let id = AppSettings.shared.defaultCameraID {
             return AVCaptureDevice(uniqueID: id)
         }
         return resolveDefaultCameraDevice()

@@ -47,7 +47,7 @@ final class FaceLabController {
     /// a measurement that isn't moving at all.
     private(set) var lastLivenessFrame: LivenessFrame?
 
-    /// Drives mode/tuning locally rather than reading `GlanceSettings`, so experimenting here can't change what
+    /// Drives mode/tuning locally rather than reading `AppSettings`, so experimenting here can't change what
     /// actually unlocks the Mac. Heavy by default since the point of this tab is watching the confirm cues.
     var livenessMode: LivenessMode = .heavy
     var livenessTuning = LivenessTuning.default

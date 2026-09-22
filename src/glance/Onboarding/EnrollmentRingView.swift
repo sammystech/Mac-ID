@@ -47,7 +47,7 @@ struct EnrollmentRingView: View {
             // Sized to sit just inside the lit ticks' outer tips, so the ring reads a hair
             // smaller once the ticks vanish and it's left on its own.
             Circle()
-                .stroke(GlanceTheme.accent, lineWidth: OnboardingMetrics.completionRingWidth)
+                .stroke(MacIDTheme.accent, lineWidth: OnboardingMetrics.completionRingWidth)
                 .frame(
                     width: diameter + 2 * (OnboardingMetrics.tickLengthLit - OnboardingMetrics.completionRingRadiusInset) - OnboardingMetrics.completionRingWidth,
                     height: diameter + 2 * (OnboardingMetrics.tickLengthLit - OnboardingMetrics.completionRingRadiusInset) - OnboardingMetrics.completionRingWidth
@@ -90,8 +90,8 @@ struct EnrollmentRingView: View {
     }
 
     private func color(for index: Int, intensity: Double) -> Color {
-        if isLit(index) || isComplete { return GlanceTheme.accent }
-        return GlanceTheme.whiteToAccent(intensity)
+        if isLit(index) || isComplete { return MacIDTheme.accent }
+        return MacIDTheme.whiteToAccent(intensity)
     }
 
     /// Drives a tick's colour and length: peaks where the turn points, fading out half a

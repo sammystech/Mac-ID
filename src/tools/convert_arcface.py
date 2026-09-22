@@ -34,10 +34,12 @@ DEFAULT_OUTPUT = REPO_ROOT / "glance" / "Models" / "ArcFace.mlpackage"
 VARIANT_ONNX_NAMES = {
     "w600k_mbf": "w600k_mbf.onnx",   # buffalo_s pack, ~13MB, MobileFaceNet backbone
     "w600k_r50": "w600k_r50.onnx",   # buffalo_l pack, ~166MB, ResNet50 backbone
+    "glintr100": "glintr100.onnx",   # antelopev2 pack, ~249MB, ResNet100 trained on Glint360K
 }
 VARIANT_PACK = {
     "w600k_mbf": "buffalo_s",
     "w600k_r50": "buffalo_l",
+    "glintr100": "antelopev2",
 }
 
 

@@ -265,7 +265,7 @@ private struct SweepStreak: View {
                 thickness: spec.thickness * 2.35,
                 blur: 78 * spec.blurScale,
                 opacity: spec.isVivid ? 0.28 : 0.16,
-                colors: [GlanceTheme.accent, GlanceTheme.accentBright]
+                colors: [MacIDTheme.accent, MacIDTheme.accentBright]
             )
             streakLayer(
                 length: length,
@@ -273,15 +273,15 @@ private struct SweepStreak: View {
                 blur: 34 * spec.blurScale,
                 opacity: spec.isVivid ? 0.48 : 0.30,
                 colors: spec.isVivid
-                    ? [GlanceTheme.accentBright, GlanceTheme.accentPale]
-                    : [GlanceTheme.accent, GlanceTheme.accentBright]
+                    ? [MacIDTheme.accentBright, MacIDTheme.accentPale]
+                    : [MacIDTheme.accent, MacIDTheme.accentBright]
             )
             streakLayer(
                 length: length,
                 thickness: spec.thickness * 0.42,
                 blur: 14 * spec.blurScale,
                 opacity: spec.isVivid ? 0.62 : 0.38,
-                colors: [GlanceTheme.accentBright, GlanceTheme.accentPale]
+                colors: [MacIDTheme.accentBright, MacIDTheme.accentPale]
             )
             if spec.hasHighlight {
                 streakLayer(
@@ -289,7 +289,7 @@ private struct SweepStreak: View {
                     thickness: spec.thickness * 0.12,
                     blur: 6,
                     opacity: spec.isVivid ? 0.36 : 0.20,
-                    colors: [GlanceTheme.accentPale, Color.white]
+                    colors: [MacIDTheme.accentPale, Color.white]
                 )
             }
         }

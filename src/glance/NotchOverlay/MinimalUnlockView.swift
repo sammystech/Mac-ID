@@ -25,7 +25,7 @@ struct MinimalUnlockView: View {
         HStack(spacing: 0) {
             Image(systemName: isUnlocked ? "lock.open.fill" : "lock.fill")
                 .font(.system(size: lockIconSize, weight: .semibold))
-                .foregroundStyle(GlanceTheme.textPrimary)
+                .foregroundStyle(MacIDTheme.textPrimary)
                 // The explicit `.animation` below is required: the phase change that flips
                 // `isUnlocked` isn't itself wrapped in an animation transaction.
                 .contentTransition(.symbolEffect(.replace.magic(fallback: .replace)))

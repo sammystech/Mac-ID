@@ -2,7 +2,7 @@
 //  LaunchAtLogin.swift
 //  glance
 //
-//  Thin wrapper around SMAppService.mainApp. Not persisted via GlanceSettings — SMAppService's own status is already the source of truth.
+//  Thin wrapper around SMAppService.mainApp. Not persisted via AppSettings — SMAppService's own status is already the source of truth.
 //
 
 import Foundation

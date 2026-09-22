@@ -7,7 +7,7 @@ import SwiftUI
 
 struct PasswordSettingsPage: View {
     @Bindable var pocController: POCController
-    @Bindable private var settings = GlanceSettings.shared
+    @Bindable private var settings = AppSettings.shared
 
     @State private var isUnlocking = false
     @State private var sessionError: String?

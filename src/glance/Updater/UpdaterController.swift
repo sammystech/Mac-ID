@@ -30,7 +30,7 @@ final class UpdaterController {
     private var canCheckForUpdatesObservation: NSKeyValueObservation?
 
     /// Forwards straight to Sparkle rather than keeping a second stored copy — Sparkle already persists this itself under the
-    /// same `UserDefaults` suite `GlanceSettings` uses.
+    /// same `UserDefaults` suite `AppSettings` uses.
     var automaticallyChecksForUpdates: Bool {
         get { controller.updater.automaticallyChecksForUpdates }
         set { controller.updater.automaticallyChecksForUpdates = newValue }

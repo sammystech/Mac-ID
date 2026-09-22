@@ -20,7 +20,7 @@ enum ArcFaceEmbedderError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .modelNotFound:
-            return "ArcFace.mlpackage/mlmodelc not found in the app bundle. Run tools/convert_arcface.py, then add glance/Models/ArcFace.mlpackage to the Xcode project."
+            return "The face recognition model is missing from the app bundle. Reinstall Mac ID."
         case .modelLoadFailed(let detail):
             return "Failed to load the ArcFace Core ML model: \(detail)"
         case .pixelBufferCreationFailed:
@@ -34,38 +34,42 @@ enum ArcFaceEmbedderError: LocalizedError {
 }
 
 nonisolated final class ArcFaceEmbedder: FaceEmbedder, @unchecked Sendable {
-    nonisolated let name = "ArcFace (w600k_r50)"
+    nonisolated let name = "ArcFace (glintr100)"
     /// Bumped from `arcface-w600k_mbf-v1`. `SecureFaceStore` refuses to compare embeddings across
     /// identifiers, so every enrolled face is correctly invalidated by the backbone change rather
     /// than silently scored against a model that produces a different embedding space.
     nonisolated let modelIdentifier = ArcFaceEmbedder.currentModelIdentifier
 
     /// Single source of truth for "which embedding space is this app using", readable without
-    /// constructing an embedder (and therefore without loading 87MB of weights) — `GlanceSettings`
+    /// constructing an embedder (and therefore without loading 87MB of weights) — `AppSettings`
     /// needs it at launch to decide whether a persisted threshold is still meaningful.
-    nonisolated static let currentModelIdentifier = "arcface-w600k_r50-v1"
+    nonisolated static let currentModelIdentifier = "arcface-glintr100-v1"
 
     /// Cosine-similarity operating points for this backbone.
     ///
     /// A threshold is only meaningful for the embedding space it was measured in: swapping the
     /// backbone moves the whole genuine/impostor distribution, so a number carried over from the
-    /// previous model is not conservative or liberal, it is simply unrelated. `GlanceSettings`
+    /// previous model is not conservative or liberal, it is simply unrelated. `AppSettings`
     /// re-seeds from these whenever `currentModelIdentifier` changes.
     ///
-    /// Measured for w600k_r50 through this app's own detect/align path, on 283 LFW faces
-    /// (85 identities, 365 genuine and 39,538 impostor pairs):
+    /// Measured 2026-09-18 on 120 LFW identities through this app's own pipeline: three photos
+    /// enrolled per person, different photos as probes (so different lighting, pose and expression),
+    /// plus a variant set with a quarter of the face blacked out. 54,978 impostor comparisons.
     ///
-    ///   impostor pairs    max 0.288, p99 0.149
-    ///   genuine, cross-session (different photo, different day)   min 0.331, median 0.672
-    ///   genuine, same-session (consecutive frames of one scan)    min 0.952, median 0.983
+    ///   threshold   clean TAR   occluded TAR   impostors accepted
+    ///      0.38        100%         100%            1
+    ///      0.40        100%         100%            1
+    ///      0.42        100%         100%            0
+    ///      0.50        100%        97.3%            0
     ///
-    /// Every value below clears the observed impostor maximum, so none of them accepted a single
-    /// impostor pair out of 39,538. The spread between them is therefore not a security/convenience
-    /// trade in the usual sense — it is how much appearance drift away from the enrolled samples
-    /// the user is willing to tolerate before being asked for a password instead.
-    nonisolated static let lessStrictThreshold: Float = 0.38
-    nonisolated static let defaultThreshold: Float = 0.45
-    nonisolated static let moreStrictThreshold: Float = 0.55
+    /// 0.42 is the lowest value admitting no impostors, and it costs nothing in recognition — so it
+    /// is the default. This backbone is good enough that the accuracy/security trade that dominated
+    /// the previous model has largely gone away in this range.
+    nonisolated static let thresholdCalibration = "glintr100-2026-09-18"
+
+    nonisolated static let lessStrictThreshold: Float = 0.40
+    nonisolated static let defaultThreshold: Float = 0.42
+    nonisolated static let moreStrictThreshold: Float = 0.50
     nonisolated let embeddingDimension = 512
     nonisolated let requiresAlignment = true
     // `embedding(for:)` returns `FaceEmbedding.l2Normalized(...)`, and stored templates are averages
@@ -123,7 +127,7 @@ nonisolated final class ArcFaceEmbedder: FaceEmbedder, @unchecked Sendable {
 
     /// Both names are checked in case the file was added under a different name.
     private static func locateModel() -> URL? {
-        for name in ["ArcFace", "w600k_r50", "w600k_mbf"] {
+        for name in ["ArcFace", "glintr100", "w600k_r50", "w600k_mbf"] {
             if let url = Bundle.main.url(forResource: name, withExtension: "mlmodelc") {
                 return url
             }

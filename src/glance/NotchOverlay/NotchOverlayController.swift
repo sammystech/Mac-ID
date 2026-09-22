@@ -68,7 +68,7 @@ final class NotchOverlayController {
     /// (making the pill slide into place) and leads it on the way out.
     private(set) var isPillDocked = false
 
-    /// Snapshotted from `GlanceSettings` when a cycle begins rather than read live,
+    /// Snapshotted from `AppSettings` when a cycle begins rather than read live,
     /// so a settings change mid-attempt can't resize the panel or change how it resolves.
     private(set) var activeUnlockStyle: UnlockAnimationStyle = .original
 
@@ -90,7 +90,7 @@ final class NotchOverlayController {
     /// Reads the same setting as `FaceUnlockCoordinator.scanWindowDuration` so
     /// the two separate timers expire together.
     private var scanTimeoutDuration: Duration {
-        .seconds(GlanceSettings.shared.faceDetectionSeconds)
+        .seconds(AppSettings.shared.faceDetectionSeconds)
     }
     /// Long enough for the closing spring to fully settle before the window is
     /// hidden/left closed — collapsing state too early made the window visibly pop away.
@@ -179,7 +179,7 @@ final class NotchOverlayController {
         resolveTask?.cancel(); resolveTask = nil
         scanTimeoutTask?.cancel()
         geometry = windowController.currentGeometry
-        activeUnlockStyle = GlanceSettings.shared.effectiveUnlockAnimationStyle
+        activeUnlockStyle = AppSettings.shared.effectiveUnlockAnimationStyle
         content = .scan(.idle)
         phase = .scanning
         updateInteractivity()
@@ -222,7 +222,7 @@ final class NotchOverlayController {
         resolveTask?.cancel(); resolveTask = nil
         scanTimeoutTask?.cancel(); scanTimeoutTask = nil
         geometry = windowController.currentGeometry
-        activeUnlockStyle = styleOverride ?? GlanceSettings.shared.effectiveUnlockAnimationStyle
+        activeUnlockStyle = styleOverride ?? AppSettings.shared.effectiveUnlockAnimationStyle
         primeWindowIfNeeded { [weak self] in
             guard let self else { return }
             content = .scan(.idle)
@@ -299,7 +299,7 @@ final class NotchOverlayController {
     func activate() {
         // Gated here rather than in `updateInteractivity()` so the cosmetic hover bump
         // stays unaffected — only the retry itself is removed.
-        guard GlanceSettings.shared.retryOnHover else { return }
+        guard AppSettings.shared.retryOnHover else { return }
         switch phase {
         case .closed, .failure:
             guard let onActivate else {
@@ -310,7 +310,7 @@ final class NotchOverlayController {
             if !isArmed {
                 // Captures its own style here; the armed path doesn't need to since
                 // `onActivate()` routes through `beginScanning()`, which captures.
-                activeUnlockStyle = GlanceSettings.shared.effectiveUnlockAnimationStyle
+                activeUnlockStyle = AppSettings.shared.effectiveUnlockAnimationStyle
                 content = .scan(.idle)
                 phase = .scanning
                 updateInteractivity()

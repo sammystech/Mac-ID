@@ -9,3 +9,16 @@ src/.release-build*
 **/xcuserdata/
 **/DerivedData/
 .DS_Store
+
+# Licence-minting secret — ships in the binary but must not be in the public repo.
+src/glance/Licensing/LicenseSecret.swift
+
+# Customer records — real names and email addresses. Never in a public repo.
+web/admin/licenses.json
+web/admin/licenses.json.tmp
+# Compiled minting tool.
+web/admin/bin/
+
+# glintr100 CoreML weights: 124 MB, over GitHub's 100 MB file limit. The model ships inside the
+# DMG; see README for how to regenerate it from the published ArcFace weights.
+src/glance/Models/ArcFace.mlpackage/Data/com.apple.CoreML/weights/weight.bin

@@ -2,7 +2,7 @@
 //  SessionAutoLocker.swift
 //  glance
 //
-//  Enforces `GlanceSettings.autoLockInterval`: re-locks the session once idle past the user's chosen limit.
+//  Enforces `AppSettings.autoLockInterval`: re-locks the session once idle past the user's chosen limit.
 //
 
 import Foundation
@@ -48,7 +48,7 @@ final class SessionAutoLocker {
               let lastActivityAt = SecureCredentialManager.lastActivityAt
         else { return }
 
-        let idleLimit = GlanceSettings.shared.autoLockInterval.duration
+        let idleLimit = AppSettings.shared.autoLockInterval.duration
         guard Date().timeIntervalSince(lastActivityAt) >= idleLimit else { return }
 
         pocController.lockSession()

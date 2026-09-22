@@ -8,15 +8,33 @@ import AppKit
 
 struct AboutSettingsPage: View {
     @Bindable var updater: UpdaterController
+    @Bindable var license = LicenseManager.shared
     let environment: AppEnvironment
 
     /// Secret-tap state for revealing the Debug/Face Lab sidebar section —
     /// see `AppEnvironment.isDebugSectionRevealed`. A pause over a second
     /// resets the count, so this requires 5 *consecutive* taps.
+    @State private var licenseInput = ""
+    @State private var licenseError: String?
     @State private var iconTapCount = 0
     @State private var lastTapDate: Date?
     private let requiredTapCount = 5
     private let tapResetInterval: TimeInterval = 1.0
+
+    /// Reads the live trial state rather than a cached string so the day count is right whenever
+    /// the page is shown.
+    private var trialCaption: String {
+        let trial = TrialManager.shared
+        trial.refresh()
+        switch trial.state {
+        case .active(let days):
+            return "Free trial — \(days) day\(days == 1 ? "" : "s") left. Enter a licence key to keep Mac ID after that."
+        case .expired:
+            return "Your free trial has ended. Enter a licence key to keep using face unlock."
+        case .notStarted:
+            return "Face unlock needs a licence key. Paste the one from your purchase email."
+        }
+    }
 
     private var versionString: String {
         let info = Bundle.main.infoDictionary
@@ -46,6 +64,48 @@ struct AboutSettingsPage: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, 16)
 
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSectionTitle(text: "Licence")
+            SettingsGroup {
+                if license.isLicensed {
+                    SettingsRowContent(
+                        title: "Licensed",
+                        subtitle: license.licenseID.map { "Key \(String($0, radix: 36).uppercased())" },
+                        subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+                    ) {
+                        Button("Remove") {
+                            license.deactivate()
+                            licenseInput = ""
+                            licenseError = nil
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(SettingsMetrics.textSecondary)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SettingsCaption(text: trialCaption)
+                        HStack(spacing: 8) {
+                            TextField("ABCD-EFGH-JKMN-PQRS", text: $licenseInput)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12, design: .monospaced))
+                                .padding(8)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+                            Button("Activate") { activate() }
+                                .disabled(licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        if let licenseError {
+                            Text(licenseError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                }
+            }
+        }
+        .padding(.bottom, 12)
+
         SettingsGroup {
             SettingsActionRowContent(
                 title: "Check for Updates",
@@ -58,19 +118,33 @@ struct AboutSettingsPage: View {
             SettingsGroupDivider()
 
             SettingsRowContent(title: "Automatically check for updates") {
-                GlanceToggle(isOn: $updater.automaticallyChecksForUpdates)
+                MacIDToggle(isOn: $updater.automaticallyChecksForUpdates)
             }
 
             SettingsGroupDivider()
 
+            // Mac ID is a derivative of MIT-licensed work, and MIT requires the copyright notice
+            // and permission notice to ship with every copy. `Acknowledgements.txt` in the bundle
+            // is what satisfies that; this row only makes it reachable. Removing the file would
+            // put the app out of compliance with the licence that permits it to exist.
             SettingsActionRowContent(
-                title: "Built on Glance",
+                title: "Acknowledgements",
                 buttonTitle: "Open"
             ) {
-                if let url = URL(string: "https://github.com/jonnyoo/glance") {
+                if let url = Bundle.main.url(forResource: "Acknowledgements", withExtension: "txt") {
                     NSWorkspace.shared.open(url)
                 }
             }
+        }
+    }
+
+    private func activate() {
+        do {
+            try license.activate(licenseInput)
+            licenseError = nil
+            licenseInput = ""
+        } catch {
+            licenseError = error.localizedDescription
         }
     }
 

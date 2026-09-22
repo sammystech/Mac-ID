@@ -306,7 +306,7 @@ private struct IdentityCard: View {
                     namePill
                     .padding(.leading, -2)
                     Spacer(minLength: 8)
-                    GlanceToggle(isOn: $isEnabled)
+                    MacIDToggle(isOn: $isEnabled)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {

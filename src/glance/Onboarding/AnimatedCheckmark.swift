@@ -20,7 +20,7 @@ private struct CheckmarkShape: Shape {
 }
 
 struct AnimatedCheckmark: View {
-    var color: Color = GlanceTheme.accent
+    var color: Color = MacIDTheme.accent
     var lineWidth: CGFloat = 6
 
     @State private var progress: CGFloat = 0

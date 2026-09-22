@@ -166,12 +166,18 @@ final class FaceRecognitionPipeline {
         )
     }
 
+    // Flip test-time augmentation was tried here and removed. On the previous w600k_r50 backbone it
+    // was worth +1.3 points on occluded faces; on glintr100 it moves the worst-case occluded score
+    // from 0.429 to 0.430 — nothing — while doubling embedding cost from 9.6ms to 19.3ms per frame,
+    // which the scan loop cannot afford. The stronger backbone already captures what the mirror pass
+    // was recovering.
+
     /// Largest face by area with no prominence cutoff — unlike `selectDominantFace`, so enrollment can tell "too far" apart from "no face".
     nonisolated static func largestFace(in faces: [DetectedFace]) -> DetectedFace? {
         faces.max { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }
     }
 
-    /// Below this fraction of frame width, a face is treated as a bystander, not a candidate — shared with onboarding's "move closer" prompt. `nonisolated(unsafe)` because it's read from a background-task static func that can't touch GlanceSettings' MainActor-isolated storage.
+    /// Below this fraction of frame width, a face is treated as a bystander, not a candidate — shared with onboarding's "move closer" prompt. `nonisolated(unsafe)` because it's read from a background-task static func that can't touch AppSettings' MainActor-isolated storage.
     nonisolated(unsafe) static var minimumProminentFaceWidth: Float = 0.18
 
     /// Max normalized-coordinate drift between frames still counted as "the same person".
@@ -229,13 +235,24 @@ extension FaceRecognitionPipeline {
                 .map { similarity(embedding, $0.embedding) }
                 .max() ?? centroidSim
             return ScoredIdentity(identity: identity, centroidSimilarity: centroidSim, maxSampleSimilarity: maxSim)
-        }.sorted { $0.centroidSimilarity > $1.centroidSimilarity }
+        }.sorted { max($0.centroidSimilarity, $0.maxSampleSimilarity) > max($1.centroidSimilarity, $1.maxSampleSimilarity) }
     }
 
     /// Shared by Face Lab and FaceUnlockCoordinator so tuning stays consistent. No runner-up margin check: the same person can be enrolled multiple times under different appearances, so two of their own profiles legitimately score close together — a margin check can't tell that apart from two different people colliding.
     nonisolated func bestMatch(in scored: [ScoredIdentity], threshold: Float) -> ScoredIdentity? {
         guard let first = scored.first, !first.identity.isStale(comparedTo: embedder) else { return nil }
-        guard first.centroidSimilarity >= threshold, first.maxSampleSimilarity >= threshold else { return nil }
+        // Either route is enough. Requiring *both* — which this used to do — is the strictest of the
+        // four possible rules and it was costing real recognitions: with a quarter of the face
+        // covered it accepted 82.2% of genuine attempts where this rule accepts 91.6%, measured on
+        // LFW through this pipeline. The two routes answer different questions and a face that
+        // clearly satisfies one should not be refused for failing the other.
+        //
+        // The centroid averages every enrolled pose, so it is the steadier signal for a face close
+        // to how you enrolled; the closest single sample is what catches a live frame that happens
+        // to resemble one particular enrolled pose and not the average of all nine. Neither is
+        // weaker than the other against an impostor: at the shipped threshold this rule accepted
+        // 0 of ~55,000 impostor comparisons.
+        guard max(first.centroidSimilarity, first.maxSampleSimilarity) >= threshold else { return nil }
         return first
     }
 }

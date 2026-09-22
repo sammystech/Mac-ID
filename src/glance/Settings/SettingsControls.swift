@@ -185,7 +185,7 @@ struct SettingsGroupDivider: View {
 /// hand-drawn approximation. Only renders correctly because the window is
 /// `.titled` and can become key — see `WindowConfiguringView.configure`;
 /// a never-key window draws this desaturated and ignores `.tint`.
-struct GlanceToggle: View {
+struct MacIDToggle: View {
     @Binding var isOn: Bool
 
     var body: some View {
@@ -193,7 +193,7 @@ struct GlanceToggle: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .controlSize(.small)
-            .tint(GlanceTheme.accent)
+            .tint(MacIDTheme.accent)
     }
 }
 
@@ -231,7 +231,7 @@ struct SettingsSlider: View {
                 ),
                 in: Double(range.lowerBound)...Double(range.upperBound)
             )
-            .tint(GlanceTheme.accent)
+            .tint(MacIDTheme.accent)
         }
         .padding(.horizontal, SettingsMetrics.rowHorizontalInset)
         .padding(.vertical, 10)
@@ -292,7 +292,7 @@ private struct SettingsActionButton: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
-                .background(isDestructive ? Color.red.opacity(0.85) : GlanceTheme.accent)
+                .background(isDestructive ? Color.red.opacity(0.85) : MacIDTheme.accent)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -325,7 +325,7 @@ struct SettingsSteppedSliderRowContent: View {
             }
             Slider(value: $index, in: 0...Double(max(stopCount - 1, 1)), step: 1)
                 .controlSize(.regular)
-                .tint(GlanceTheme.accent)
+                .tint(MacIDTheme.accent)
                 .padding(.top, 8)
         }
         .padding(.horizontal, SettingsMetrics.rowHorizontalInset)
@@ -358,7 +358,7 @@ struct SettingsOptionSliderRowContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Slider(value: $index, in: 0...Double(max(stopCount - 1, 1)), step: 1)
                     .controlSize(.regular)
-                    .tint(GlanceTheme.accent)
+                    .tint(MacIDTheme.accent)
                 HStack {
                     ForEach(Array(stepLabels.enumerated()), id: \.offset) { position, label in
                         Text(label)
@@ -441,7 +441,7 @@ struct SettingsPrimaryButton: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, compact ? 14 : 16)
                 .padding(.vertical, compact ? 6 : 7)
-                .background(GlanceTheme.accent)
+                .background(MacIDTheme.accent)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -618,7 +618,7 @@ struct SettingsOptionTile<Preview: View>: View {
                     .background {
                         SettingsMetrics.optionPreviewFill
                         if isSelected {
-                            GlanceTheme.accent.opacity(SettingsMetrics.optionPreviewSelectedTintOpacity)
+                            MacIDTheme.accent.opacity(SettingsMetrics.optionPreviewSelectedTintOpacity)
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: SettingsMetrics.optionPreviewCornerRadius, style: .continuous))
@@ -663,7 +663,7 @@ struct SettingsOptionTile<Preview: View>: View {
                                 style: .continuous
                             )
                             .strokeBorder(
-                                GlanceTheme.accent,
+                                MacIDTheme.accent,
                                 lineWidth: SettingsMetrics.optionSelectionStrokeWidth
                             )
                             .padding(-expansion)
@@ -1008,7 +1008,7 @@ final class WindowConfiguringView: NSView {
         // buys the macOS 26 corner radius (measured: 17.5pt with no
         // toolbar vs. Finder's own radius with `.unified`). Nothing of it
         // is visible; it only reserves the band the traffic lights sit in.
-        let toolbar = NSToolbar(identifier: "GlanceSettingsToolbar")
+        let toolbar = NSToolbar(identifier: "MacIDSettingsToolbar")
         window.toolbar = toolbar
         window.toolbarStyle = .unified
 

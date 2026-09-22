@@ -10,6 +10,7 @@
 import Foundation
 import CoreGraphics
 import Observation
+import OSLog
 
 @Observable
 @MainActor
@@ -19,21 +20,21 @@ final class FaceUnlockCoordinator {
     let camera = CameraManager()
     let pipeline = FaceRecognitionPipeline()
 
-    /// Persisted via GlanceSettings. Setting to false cancels any in-flight scan and disarms the overlay immediately.
+    /// Persisted via AppSettings. Setting to false cancels any in-flight scan and disarms the overlay immediately.
     var isEnabled: Bool {
         didSet {
-            GlanceSettings.shared.isFaceUnlockEnabled = isEnabled
+            AppSettings.shared.isFaceUnlockEnabled = isEnabled
             if !isEnabled { disarmOverlay() }
         }
     }
 
     /// Kept independent from Face Lab's own `threshold` so tuning the debug tool never silently changes the real unlock gate.
     var matchThreshold: Float {
-        didSet { GlanceSettings.shared.matchThreshold = matchThreshold }
+        didSet { AppSettings.shared.matchThreshold = matchThreshold }
     }
     /// Shares its setting with NotchOverlayController's scanning timeout, so the background loop stops in step with the UI collapsing.
     private var scanWindowDuration: TimeInterval {
-        TimeInterval(GlanceSettings.shared.faceDetectionSeconds)
+        TimeInterval(AppSettings.shared.faceDetectionSeconds)
     }
     /// Requires several consecutive below-threshold frames so a single bad-angle read doesn't trigger the failure animation.
     private let wrongFaceStreakThreshold = 6
@@ -44,6 +45,16 @@ final class FaceUnlockCoordinator {
     /// How long to wait before looking for another camera frame. Short enough that processing, not
     /// polling, is what paces the scan loop.
     private static let framePollInterval: UInt64 = 5_000_000
+    /// Run the rectangle detector every Nth processed frame. It is the most expensive thing on the
+    /// path (~10ms) and answers a question that cannot change between frames — a phone or sheet of
+    /// paper does not appear and vanish in 33ms. Its cue needs 3 firing frames, and a scan window
+    /// sees far more than 5x that, so raising this from 3 costs the cue nothing.
+    private static let bezelCheckInterval = 5
+
+    /// Timing for the one number that matters — trigger to unlocked. Camera warm-up dominates it, so
+    /// it is reported separately from the recognition work that follows. Read it with:
+    ///     log stream --predicate 'subsystem == "com.samuelmittman.macid"' --info
+    private static let timingLog = Logger(subsystem: "com.samuelmittman.macid", category: "timing")
 
     private(set) var statusMessage = "Idle"
     private(set) var lastOutcome: String?
@@ -64,15 +75,15 @@ final class FaceUnlockCoordinator {
     private let headlessRetryDelay: Duration = .seconds(1)
 
     /// When off, no notch/pill presence at all — every overlay call in this file is conditioned on this rather than just skipping the video.
-    private var showsUI: Bool { GlanceSettings.shared.showUnlockAnimation }
+    private var showsUI: Bool { AppSettings.shared.showUnlockAnimation }
 
     /// Reads the space key on the lock screen for the "On space" trigger; only runs while locked + opted in.
     private let spaceKeyMonitor = SpaceKeyMonitor()
 
     init(pocController: POCController) {
         self.pocController = pocController
-        self.isEnabled = GlanceSettings.shared.isFaceUnlockEnabled
-        self.matchThreshold = GlanceSettings.shared.matchThreshold
+        self.isEnabled = AppSettings.shared.isFaceUnlockEnabled
+        self.matchThreshold = AppSettings.shared.matchThreshold
         spaceKeyMonitor.onSpaceKeyDown = { [weak self] in self?.handleSpaceKeyPress() }
         observeLockAndWakeEvents()
     }
@@ -87,12 +98,39 @@ final class FaceUnlockCoordinator {
             _ = lockMonitor.eventCount
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
-                self?.observeLockAndWakeEvents()
+                guard let self else { return }
+                self.observeLockAndWakeEvents()
+                // Warm the camera *during* the settle delay rather than after it. This is the single
+                // largest term in time-to-unlock: `startRunning()` needs a few hundred milliseconds
+                // before it yields a usable frame, and it used to be reached only after this sleep
+                // and the arm animation — roughly 550ms of waiting before the hardware was even
+                // asked to start. Everything the recognizer then does costs ~25ms a frame against
+                // that.
+                self.prewarmCamera()
                 // Brief settle delay: CGSession's reported state can lag the true state right after wake.
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                self?.evaluateTrigger()
+                self.evaluateTrigger()
             }
         }
+    }
+
+    /// Speculative: starts the capture session on the cheap, stable preconditions, before the
+    /// settle delay has confirmed we will actually scan. `evaluateTrigger` calls `abandonPrewarm()`
+    /// on every path that turns out not to scan, so the camera is never left running — which
+    /// matters, because a running session lights the recording indicator.
+    private func prewarmCamera() {
+        guard isEnabled,
+              LicenseManager.shared.isEntitled,
+              SecureCredentialManager.isSessionUnlocked,
+              SecureCredentialManager.hasStoredPassword()
+        else { return }
+        Task { [weak self] in await self?.camera.start() }
+    }
+
+    /// Stops a speculatively-started camera when no scan took ownership of it.
+    private func abandonPrewarm() {
+        guard scanTask == nil else { return }
+        camera.stop()
     }
 
     private func evaluateTrigger() {
@@ -102,7 +140,7 @@ final class FaceUnlockCoordinator {
             disarmOverlay()
             return
         }
-        guard !lockMonitor.isSleeping else { return }
+        guard !lockMonitor.isSleeping else { abandonPrewarm(); return }
 
         // `.wake` (sleep, display sleep, or screensaver stopping) is an explicit "let me back in," so clear the one-shot guard.
         // `isWithinRecentArmBurst` keeps the several wake signals from one lid-open from each re-arming and fighting over the camera.
@@ -113,10 +151,20 @@ final class FaceUnlockCoordinator {
         // Runs before the hasArmedForCurrentLock guard — the space monitor's lifetime is tied to "locked + opted in," not to whether a scan already ran.
         updateSpaceMonitor()
 
-        guard isEnabled, !hasArmedForCurrentLock else { return }
-        guard let signal = requiredTrigger(for: lockMonitor.lastEvent) else { return }
+        guard isEnabled, !hasArmedForCurrentLock else { abandonPrewarm(); return }
+        guard let signal = requiredTrigger(for: lockMonitor.lastEvent) else { abandonPrewarm(); return }
         // A pinned display that isn't connected bails entirely rather than showing up elsewhere; "Main display" (nil) always resolves.
-        guard NotchGeometry.preferredScreen() != nil else { return }
+        guard NotchGeometry.preferredScreen() != nil else { abandonPrewarm(); return }
+
+        // Gated here rather than deeper in the scan so an unlicensed copy never turns the camera on.
+        // `isEntitled` covers a paid key or a live trial; the trial's remaining days are re-checked
+        // here rather than cached, so it stops working the moment it lapses mid-session.
+        TrialManager.shared.refresh()
+        guard LicenseManager.shared.isEntitled else {
+            statusMessage = "Your free trial has ended — add a licence key in Settings → About."
+            abandonPrewarm()
+            return
+        }
 
         guard SecureCredentialManager.isSessionUnlocked else {
             statusMessage = "Face unlock is on, but the session is locked — authenticate once from Password settings first."
@@ -128,11 +176,11 @@ final class FaceUnlockCoordinator {
         }
 
         // A deselected trigger means "don't auto-scan for this signal," not "do nothing" — the user can still opt in by hand.
-        let shouldAutoScan = GlanceSettings.shared.unlockTriggers.contains(signal)
+        let shouldAutoScan = AppSettings.shared.unlockTriggers.contains(signal)
 
         // Headless has nothing to arm/hover, so if this signal isn't selected there's nothing to do — and hasArmedForCurrentLock
         // must stay false, or a later selected signal could never fire (nothing else calls arm() to reset it).
-        guard showsUI || shouldAutoScan else { return }
+        guard showsUI || shouldAutoScan else { abandonPrewarm(); return }
 
         hasArmedForCurrentLock = true
         lastArmedAt = .now
@@ -184,7 +232,7 @@ final class FaceUnlockCoordinator {
     /// Idempotent and safe to call on every lock/wake event. Deliberately does not prompt for Input Monitoring — a missing grant just means "don't listen."
     private func updateSpaceMonitor() {
         let shouldListen = isEnabled
-            && GlanceSettings.shared.unlockTriggers.contains(.onSpace)
+            && AppSettings.shared.unlockTriggers.contains(.onSpace)
             && LockMonitor.isScreenActuallyLocked()
             && SpaceKeyMonitor.hasInputMonitoringAccess()
         if shouldListen {
@@ -197,7 +245,7 @@ final class FaceUnlockCoordinator {
     /// Runs the same gate chain as `evaluateTrigger`, then starts a scan. Independent of `LockMonitor` events, so doesn't touch `hasArmedForCurrentLock`.
     private func handleSpaceKeyPress() {
         guard isEnabled,
-              GlanceSettings.shared.unlockTriggers.contains(.onSpace),
+              AppSettings.shared.unlockTriggers.contains(.onSpace),
               LockMonitor.isScreenActuallyLocked(),
               NotchGeometry.preferredScreen() != nil,
               SecureCredentialManager.isSessionUnlocked,
@@ -253,6 +301,7 @@ final class FaceUnlockCoordinator {
     private func runScanCycle(generation: Int) async {
         guard LockMonitor.isScreenActuallyLocked() else { return }
 
+        let scanStartedAt = ContinuousClock.now
         await camera.start()
         guard generation == scanGeneration else { return }
 
@@ -270,7 +319,8 @@ final class FaceUnlockCoordinator {
 
         let outcome = await observeScanWindow(
             deadline: Date().addingTimeInterval(scanWindowDuration),
-            requireOverlayScanning: showsUI
+            requireOverlayScanning: showsUI,
+            scanStartedAt: scanStartedAt
         )
 
         // A newer cycle now owns the camera and overlay — leave both alone, and leave the auto-retry one-shot unspent.
@@ -316,7 +366,7 @@ final class FaceUnlockCoordinator {
 
     /// `delay` waits out whatever the overlay is still showing so the retry doesn't start underneath the previous outcome.
     private func scheduleAutoRetryIfEnabled(after delay: Duration) {
-        guard GlanceSettings.shared.autoRetryOnce, !hasAutoRetriedForCurrentLock else { return }
+        guard AppSettings.shared.autoRetryOnce, !hasAutoRetriedForCurrentLock else { return }
         hasAutoRetriedForCurrentLock = true
         autoRetryTask?.cancel()
         autoRetryTask = Task { [weak self] in
@@ -331,6 +381,10 @@ final class FaceUnlockCoordinator {
         }
     }
 
+    nonisolated private static func ms(from instant: ContinuousClock.Instant) -> Int {
+        Int((ContinuousClock.now - instant) / .milliseconds(1))
+    }
+
     private enum ScanOutcome {
         case matched
         case consistentlyWrongFace
@@ -343,17 +397,21 @@ final class FaceUnlockCoordinator {
     /// liveness never fails the scan by staying undecided, it just keeps scanning until `deadline`.
     /// `requireOverlayScanning` bails early once the overlay's own timeout collapses the UI — only applied when there is an
     /// overlay, since headlessly `phase` never becomes `.scanning` at all.
-    private func observeScanWindow(deadline: Date, requireOverlayScanning: Bool) async -> ScanOutcome {
-        let livenessEnabled = GlanceSettings.shared.livenessChecksEnabled
+    private func observeScanWindow(
+        deadline: Date,
+        requireOverlayScanning: Bool,
+        scanStartedAt: ContinuousClock.Instant
+    ) async -> ScanOutcome {
+        let livenessEnabled = AppSettings.shared.livenessChecksEnabled
         let liveness = LivenessAnalyzer()
-        liveness.modeProvider = { GlanceSettings.shared.livenessMode }
+        liveness.modeProvider = { AppSettings.shared.livenessMode }
         // Read fresh per frame, like the mode, so changing it in Settings mid-scan takes effect.
-        liveness.tuningProvider = { GlanceSettings.shared.printedPhotoSensitivity.applied() }
+        liveness.tuningProvider = { AppSettings.shared.printedPhotoSensitivity.applied() }
         liveness.enabledCuesProvider = {
             // "Off" removes the cue outright rather than pushing its threshold out of reach, so it
             // can't accumulate frames or show up as evidence in the outcome message.
             var cues = Set(LivenessCue.allCases)
-            if GlanceSettings.shared.printedPhotoSensitivity == .off {
+            if AppSettings.shared.printedPhotoSensitivity == .off {
                 cues.remove(.printedPhoto)
             }
             return cues
@@ -371,6 +429,7 @@ final class FaceUnlockCoordinator {
         /// Rolling embeddings for the face currently being tracked — see `fusedEmbedding` below.
         var recentEmbeddings: [[Float]] = []
         var processedFrames = 0
+        var firstFrameAt: ContinuousClock.Instant?
 
         while Date() < deadline, !Task.isCancelled,
               !requireOverlayScanning || NotchOverlayController.shared.phase == .scanning {
@@ -384,13 +443,17 @@ final class FaceUnlockCoordinator {
                 try? await Task.sleep(nanoseconds: Self.framePollInterval)
                 continue
             }
+            if firstFrameAt == nil {
+                firstFrameAt = .now
+                Self.timingLog.info("camera: first frame \(Self.ms(from: scanStartedAt), privacy: .public) ms after the scan began")
+            }
             lastProcessedFrameID = frame.id
 
             // The rectangle detector is the single most expensive thing on this path and it answers a
             // question that cannot change between consecutive frames: a phone or sheet of paper does not
             // appear and vanish in 33ms. Running it every third processed frame keeps the cue's own
             // `deviceFrames: 3` threshold reachable well inside the scan window while cutting its cost.
-            let runsBezelCheck = processedFrames % 3 == 0
+            let runsBezelCheck = processedFrames % Self.bezelCheckInterval == 0
             processedFrames += 1
 
             let pipeline = self.pipeline
@@ -463,6 +526,8 @@ final class FaceUnlockCoordinator {
 
             if let readyMatch, livenessConfirmed {
                 statusMessage = "Recognized — unlocking…"
+                let sinceFirstFrame = firstFrameAt.map { Self.ms(from: $0) } ?? 0
+                Self.timingLog.info("matched after \(processedFrames, privacy: .public) frames, \(sinceFirstFrame, privacy: .public) ms of recognition, \(Self.ms(from: scanStartedAt), privacy: .public) ms total")
                 let livenessNote = livenessEnabled
                     ? (confirmingCue.map { "live via \($0.title)" } ?? "liveness clear")
                     : "liveness off"

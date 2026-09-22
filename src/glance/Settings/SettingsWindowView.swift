@@ -41,7 +41,7 @@ struct SettingsWindowView: View {
     /// while onboarding is incomplete. A real user should never hit this
     /// branch, only a blank frame before `dismissWindow` closes it.
     var body: some View {
-        if GlanceSettings.shared.hasCompletedOnboarding {
+        if AppSettings.shared.hasCompletedOnboarding {
             settingsContent
         } else {
             Color.clear
@@ -70,7 +70,7 @@ struct SettingsWindowView: View {
         // Cascades to every native control so nothing falls back to the
         // system accent. Only takes effect because the window can become
         // key; see WindowConfiguringView.configure.
-        .tint(GlanceTheme.accent)
+        .tint(MacIDTheme.accent)
         // `Window` is a singleton scene — closing it only orders the
         // NSWindow out, keeping `@State` alive, so without this `selection`
         // would remember the last tab instead of resetting to General.

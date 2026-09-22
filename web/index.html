@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac ID — Unlock your Mac with a look</title>
+<meta name="description" content="Face unlock for macOS. Everything runs on-device; your face never leaves your Mac.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --violet:#6D4AFF; --violet-lit:#8E72FF; --indigo:#4A2FD0;
+  --ink:#0B0A12; --ink-2:#12101D;
+  --text:#F4F3FA; --text-dim:#A8A4C0; --text-faint:#726E8C;
+  --glass:rgba(255,255,255,.055);
+  --glass-hi:rgba(255,255,255,.10);
+  --edge:rgba(255,255,255,.12);
+  --edge-lit:rgba(255,255,255,.22);
+  --radius:22px;
+  --maxw:1080px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink); color:var(--text);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased; line-height:1.55; overflow-x:hidden;
+}
+/* Ambient colour that the frosted panels actually have something to refract. */
+body::before{
+  content:""; position:fixed; inset:-20vh -10vw; z-index:-2; pointer-events:none;
+  background:
+    radial-gradient(48vw 48vw at 12% 4%,  rgba(109,74,255,.40), transparent 60%),
+    radial-gradient(42vw 42vw at 88% 22%, rgba(38,180,255,.22), transparent 62%),
+    radial-gradient(52vw 52vw at 50% 92%, rgba(74,47,208,.30), transparent 66%);
+  filter:blur(20px);
+}
+body::after{
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+
+/* ---------------------------------------------------------------- glass */
+.glass{
+  background:linear-gradient(150deg, var(--glass-hi), var(--glass));
+  border:1px solid var(--edge);
+  border-radius:var(--radius);
+  backdrop-filter:blur(28px) saturate(175%);
+  -webkit-backdrop-filter:blur(28px) saturate(175%);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.14) inset,
+    0 -1px 0 rgba(0,0,0,.22) inset,
+    0 26px 60px -24px rgba(0,0,0,.75);
+  position:relative; overflow:hidden;
+}
+/* The specular sweep across the top edge — what sells it as glass rather than a grey box. */
+.glass::before{
+  content:""; position:absolute; inset:0 0 auto 0; height:52%;
+  background:linear-gradient(180deg, rgba(255,255,255,.16), transparent);
+  pointer-events:none;
+}
+
+/* ---------------------------------------------------------------- nav */
+nav{position:sticky; top:0; z-index:50; padding:14px 0}
+.navbar{
+  display:flex; align-items:center; gap:14px; padding:11px 18px; border-radius:18px;
+  background:rgba(12,10,22,.55); border:1px solid var(--edge);
+  backdrop-filter:blur(24px) saturate(180%); -webkit-backdrop-filter:blur(24px) saturate(180%);
+}
+.brand{display:flex; align-items:center; gap:11px; font-weight:650; letter-spacing:-.01em}
+.brand svg{width:29px;height:29px;flex:none}
+.navlinks{margin-left:auto; display:flex; gap:10px; align-items:center}
+.navlinks a{color:var(--text-dim); text-decoration:none; font-size:14.5px; padding:7px 12px; border-radius:10px; transition:.18s}
+.navlinks a:hover{color:var(--text); background:rgba(255,255,255,.07)}
+
+/* ---------------------------------------------------------------- buttons */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:9px;
+  padding:13px 24px; border-radius:14px; font-weight:600; font-size:15px;
+  text-decoration:none; border:1px solid transparent; cursor:pointer; transition:.2s; white-space:nowrap;
+}
+.btn-primary{
+  background:linear-gradient(165deg, var(--violet-lit), var(--indigo));
+  color:#fff; border-color:rgba(255,255,255,.22);
+  box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 14px 34px -12px rgba(109,74,255,.85);
+}
+.btn-primary:hover{transform:translateY(-2px); box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 20px 42px -12px rgba(109,74,255,.95)}
+.btn-ghost{background:rgba(255,255,255,.07); color:var(--text); border-color:var(--edge)}
+.btn-ghost:hover{background:rgba(255,255,255,.12); border-color:var(--edge-lit)}
+
+/* ---------------------------------------------------------------- hero */
+header{padding:86px 0 68px; text-align:center; position:relative}
+.pill{
+  display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
+  background:rgba(255,255,255,.07); border:1px solid var(--edge);
+  font-size:13px; color:var(--text-dim); margin-bottom:26px;
+}
+.dot{width:6px;height:6px;border-radius:50%;background:#46E39B;box-shadow:0 0 10px #46E39B}
+h1{
+  font-size:clamp(2.6rem, 6.4vw, 4.6rem); font-weight:700; letter-spacing:-.035em; line-height:1.04;
+  background:linear-gradient(175deg,#fff 30%, #B9AEFF); -webkit-background-clip:text;
+  background-clip:text; color:transparent; margin-bottom:20px;
+}
+.sub{font-size:clamp(1.02rem,2.1vw,1.24rem); color:var(--text-dim); max-width:620px; margin:0 auto 34px}
+.cta{display:flex; gap:13px; justify-content:center; flex-wrap:wrap}
+.meta{margin-top:17px; font-size:13.5px; color:var(--text-faint)}
+
+/* ---------------------------------------------------------------- the notch visual */
+.stage{margin:60px auto 0; max-width:760px; padding:36px 28px 44px}
+.mac{
+  position:relative; margin:0 auto; width:min(100%,560px); aspect-ratio:16/10;
+  border-radius:16px; background:linear-gradient(170deg,#1B1828,#0D0B16);
+  border:1px solid var(--edge); overflow:hidden;
+}
+.notch{
+  position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width:190px; height:34px; background:#000; border-radius:0 0 17px 17px;
+  display:flex; align-items:center; justify-content:center; gap:9px; z-index:3;
+}
+.scan{width:15px;height:15px;border-radius:5px;border:2px solid var(--violet-lit); position:relative}
+.scan::after{
+  content:""; position:absolute; left:-2px; right:-2px; height:2px; background:var(--violet-lit);
+  top:50%; border-radius:2px; box-shadow:0 0 8px var(--violet-lit);
+  animation:sweep 2.4s ease-in-out infinite;
+}
+@keyframes sweep{0%,100%{transform:translateY(-7px);opacity:.35}50%{transform:translateY(6px);opacity:1}}
+.notchtext{font-size:11.5px; color:#CFC7FF; font-weight:500; letter-spacing:.01em}
+.face{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+}
+.face svg{width:150px;height:150px;opacity:.9}
+.ring{
+  position:absolute; width:210px; height:210px; border-radius:50%;
+  border:2px dashed rgba(142,114,255,.5); animation:spin 14s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------------------------------------------------------------- sections */
+section{padding:74px 0}
+.eyebrow{font-size:12.5px; font-weight:650; letter-spacing:.13em; text-transform:uppercase; color:var(--violet-lit); margin-bottom:13px}
+h2{font-size:clamp(1.85rem,4vw,2.6rem); font-weight:670; letter-spacing:-.025em; margin-bottom:16px}
+.lede{color:var(--text-dim); max-width:640px; margin-bottom:40px; font-size:1.04rem}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(272px,1fr)); gap:18px}
+.card{padding:27px}
+.card h3{font-size:1.1rem; font-weight:620; margin-bottom:9px; letter-spacing:-.012em}
+.card p{color:var(--text-dim); font-size:.945rem}
+.ico{
+  width:42px;height:42px;border-radius:12px; display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(160deg, rgba(142,114,255,.34), rgba(74,47,208,.20));
+  border:1px solid var(--edge); margin-bottom:17px;
+}
+.ico svg{width:21px;height:21px;stroke:var(--violet-lit);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------------------------------------------------------------- pricing */
+.price-wrap{display:flex; justify-content:center}
+.price{padding:40px 36px; text-align:center; max-width:410px; width:100%}
+.amount{font-size:3.5rem; font-weight:700; letter-spacing:-.04em; line-height:1}
+.amount span{font-size:1.05rem; color:var(--text-dim); font-weight:500; letter-spacing:0}
+.plist{list-style:none; text-align:left; margin:26px 0 28px; display:grid; gap:11px}
+.plist li{display:flex; gap:11px; align-items:flex-start; color:var(--text-dim); font-size:.945rem}
+.check{width:19px;height:19px;flex:none;margin-top:2px;stroke:#46E39B;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------------------------------------------------------------- honesty panel */
+.note{padding:26px 28px; border-color:rgba(255,196,84,.26); background:linear-gradient(150deg, rgba(255,196,84,.10), rgba(255,196,84,.035))}
+.note h3{font-size:1.02rem; margin-bottom:9px; color:#FFD08A}
+.note p{color:#D8C7A8; font-size:.93rem}
+.note p + p{margin-top:9px}
+.note ol.steps{margin:12px 0 12px 18px; padding:0; display:flex; flex-direction:column; gap:8px}
+.note ol.steps li{color:#D8C7A8; font-size:.93rem; line-height:1.55; padding-left:4px}
+.note ol.steps li::marker{color:#FFD08A; font-variant-numeric:tabular-nums}
+.note ol.steps strong{color:#FFD08A; font-weight:600}
+
+
+/* ---------------------------------------------------------------- steps */
+.steps{counter-reset:s; display:grid; gap:14px}
+.step{display:flex; gap:17px; align-items:flex-start; padding:21px 24px}
+.step::before{
+  counter-increment:s; content:counter(s);
+  width:31px;height:31px;flex:none;border-radius:10px;
+  background:linear-gradient(160deg,var(--violet-lit),var(--indigo));
+  display:flex;align-items:center;justify-content:center;font-weight:670;font-size:14.5px;
+}
+.step h4{font-size:1rem;font-weight:600;margin-bottom:4px}
+.step p{color:var(--text-dim);font-size:.925rem}
+code{font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:.86em; background:rgba(255,255,255,.09); padding:2px 7px; border-radius:6px; border:1px solid var(--edge)}
+
+footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-top:60px}
+.foot{display:flex; gap:18px; align-items:center; flex-wrap:wrap; color:var(--text-faint); font-size:13.5px}
+.foot a{color:var(--text-dim); text-decoration:none}
+.foot a:hover{color:var(--text)}
+.foot .sp{margin-left:auto}
+
+@media (max-width:640px){
+  .navlinks a:not(.btn){display:none}
+  header{padding:54px 0 44px}
+  .stage{padding:22px 14px 30px}
+  .foot .sp{margin-left:0; width:100%}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap"><div class="navbar">
+  <div class="brand">
+    <svg viewBox="0 0 480 480" aria-hidden="true">
+      <rect width="480" height="480" rx="108" fill="url(#bg)"/>
+      <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#8E72FF"/><stop offset="1" stop-color="#4A2FD0"/></linearGradient></defs>
+      <g stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".95">
+        <path d="M120 186 V150 A30 30 0 0 1 150 120 H186"/>
+        <path d="M294 120 H330 A30 30 0 0 1 360 150 V186"/>
+        <path d="M120 294 V330 A30 30 0 0 0 150 360 H186"/>
+        <path d="M294 360 H330 A30 30 0 0 0 360 330 V294"/>
+      </g>
+      <circle cx="240" cy="216" r="40" fill="#fff"/>
+      <path d="M180 320 C180 282 207 254 240 254 C273 254 300 282 300 320 Z" fill="#fff"/>
+    </svg>
+    Mac&nbsp;ID
+  </div>
+  <div class="navlinks">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a class="btn btn-primary" style="padding:9px 17px;font-size:14px" href="#download">Download</a>
+  </div>
+</div></div></nav>
+
+<header><div class="wrap">
+  <div class="pill"><span class="dot"></span> 3 days free · runs entirely on your Mac</div>
+  <h1>Unlock your Mac<br>with a look.</h1>
+  <p class="sub">Mac ID recognises your face the moment your lock screen appears. No typing, no reaching for a key. Your face is processed on-device and never leaves your Mac.</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="#download">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16"/></svg>
+      Download for Mac
+    </a>
+    <a class="btn btn-ghost" href="#pricing">Buy a licence · $4.99</a>
+  </div>
+  <p class="meta">Free for 3 days, then $4.99 once · macOS 15 or later · Apple silicon</p>
+
+  <div class="stage glass">
+    <div class="mac">
+      <div class="notch"><div class="scan"></div><span class="notchtext">Looking for you…</span></div>
+      <div class="face">
+        <div class="ring"></div>
+        <svg viewBox="0 0 480 480" aria-hidden="true">
+          <g stroke="#8E72FF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <path d="M60 170 V112 A52 52 0 0 1 112 60 H170"/>
+            <path d="M310 60 H368 A52 52 0 0 1 420 112 V170"/>
+            <path d="M60 310 V368 A52 52 0 0 0 112 420 H170"/>
+            <path d="M310 420 H368 A52 52 0 0 0 420 368 V310"/>
+          </g>
+          <circle cx="240" cy="205" r="52" fill="#8E72FF"/>
+          <path d="M160 330 C160 285 196 250 240 250 C284 250 320 285 320 330 Z" fill="#8E72FF"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div></header>
+
+<section id="features"><div class="wrap">
+  <div class="eyebrow">What you get</div>
+  <h2>Fast, private, and honest about its limits.</h2>
+  <p class="lede">Built on Apple's Vision and Core ML frameworks, with a face-recognition model that runs on the Neural Engine in under ten milliseconds.</p>
+  <div class="grid">
+    <div class="card glass">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M8 12h8M12 8v8"/></svg></div>
+      <h3>Nothing leaves your Mac</h3>
+      <p>Camera frames are processed in memory and never written to disk. Your face data and your password never touch a network — there is no server to talk to.</p>
+    </div>
+    <div class="card glass">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 12l5 5L21 4"/></svg></div>
+      <h3>Recognises you, not a lookalike</h3>
+      <p>A ResNet-100 face model measured at 100% recognition on both clean and partially covered faces, with zero false accepts across 54,978 impostor comparisons.</p>
+    </div>
+    <div class="card glass">
+      <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div>
+      <h3>Rejects printed photos</h3>
+      <p>A printed photo held to the camera makes a moiré pattern that skin does not. Mac ID looks for it, alongside screen glare and device edges, and refuses to unlock.</p>
+    </div>
+    <div class="card glass">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></div>
+      <h3>Ready before you are</h3>
+      <p>The camera starts warming the instant your Mac locks, so recognition begins as the notch finishes opening rather than after it.</p>
+    </div>
+    <div class="card glass">
+      <div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
+      <h3>Glasses, light, angle</h3>
+      <p>Enrolment captures nine head positions, and matching accepts whichever of them you actually resemble — so a different expression or a change of light doesn't lock you out.</p>
+    </div>
+    <div class="card glass">
+      <div class="ico"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 118 0v3"/></svg></div>
+      <h3>Touch ID guards the key</h3>
+      <p>Your password is encrypted with a key that only your fingerprint can unwrap. It is asked for once per launch, never at the lock screen.</p>
+    </div>
+  </div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <div class="eyebrow">How it works</div>
+  <h2>Four steps, about two minutes.</h2>
+  <div class="steps">
+    <div class="step glass"><div><h4>Install and grant access</h4><p>Drag Mac ID to Applications. It asks for the camera, and for Accessibility so it can type your password at the lock screen.</p></div></div>
+    <div class="step glass"><div><h4>Enrol your face</h4><p>Follow the ring: look straight ahead, then turn slightly in each direction. Mac ID stores a mathematical description of your face — not a photograph.</p></div></div>
+    <div class="step glass"><div><h4>Paste your licence</h4><p>Settings → About → paste the key from your purchase email, and press Activate.</p></div></div>
+    <div class="step glass"><div><h4>Lock your Mac</h4><p>The notch opens, finds you, and types your password. If it doesn't recognise you, nothing happens and you type it yourself.</p></div></div>
+  </div>
+</div></section>
+
+<section id="pricing"><div class="wrap">
+  <div class="eyebrow">Pricing</div>
+  <h2>Try it free. Then one price, forever.</h2>
+  <p class="lede">Every download gets 3 days of everything, with no payment details and no account. If it works for you, a single payment buys a licence that never expires and never phones home.</p>
+  <div class="price-wrap"><div class="price glass">
+    <div class="amount">$4.99<span> once</span></div>
+    <ul class="plist">
+      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>3-day free trial, no card required</span></li>
+      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>A licence key that is uniquely yours</span></li>
+      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Never expires, no subscription</span></li>
+      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Verified offline — works with no internet</span></li>
+      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Free updates, delivered in the app</span></li>
+    </ul>
+    <a class="btn btn-primary" style="width:100%" href="#" id="buy">Buy a licence</a>
+    <p class="meta" style="margin-top:13px">You'll be asked for your name and email so the key can be sent to you.</p>
+  </div></div>
+</div></section>
+
+<section id="download"><div class="wrap">
+  <div class="eyebrow">Download</div>
+  <h2>Get Mac ID.</h2>
+  <p class="lede">Install it and everything works for 3 days. Enter a licence key any time before or after the trial ends.</p>
+  <div class="cta" style="justify-content:flex-start">
+    <a class="btn btn-primary" id="dmg" href="https://github.com/sammystech/Mac-ID/releases/latest/download/Mac-ID-1.5.dmg">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16"/></svg>
+      Download Mac ID 1.5
+    </a>
+    <a class="btn btn-ghost" href="https://github.com/sammystech/Mac-ID/releases">Release notes</a>
+  </div>
+  <p class="meta" style="margin-bottom:34px">Apple silicon · macOS 15 Sequoia or later · 122&nbsp;MB</p>
+
+  <div class="note glass">
+    <h3>Opening it the first time</h3>
+    <p>macOS will refuse to open Mac ID on the first try and say the application cannot be opened. That is Gatekeeper, not a broken download — Mac ID is signed, but it is not notarised by Apple, which requires a paid Apple Developer account. You only have to do this once:</p>
+    <ol class="steps">
+      <li>Drag <strong>Mac ID</strong> into your <strong>Applications</strong> folder.</li>
+      <li>Double-click it. macOS will say it can&rsquo;t be opened &mdash; click <strong>Done</strong>.</li>
+      <li>Open <strong>System Settings &rarr; Privacy &amp; Security</strong> and scroll down.</li>
+      <li>Next to the note about Mac ID, click <strong>Open Anyway</strong>, then confirm with Touch ID.</li>
+    </ol>
+    <p>After that it opens normally like any other app.</p>
+  </div>
+
+  <div class="note glass">
+    <h3>Worth knowing before you install</h3>
+    <p>Mac ID is a convenience feature, not a security upgrade. A MacBook camera sees a flat image, where an iPhone builds a 3D map of your face — so this cannot be as strong as Face ID or Touch ID. It reliably refuses a printed photo and a photo on a phone screen; it does not reliably refuse a video of you.</p>
+    <p>macOS gives no way for an app to authorise a login, so Mac ID unlocks by typing your stored password. That password is encrypted on your Mac behind Touch ID. If you are not comfortable with that trade, this is not the app for you.</p>
+  </div>
+</div></section>
+
+<footer><div class="wrap"><div class="foot">
+  <span>© 2026 Mac ID</span>
+  <a href="https://github.com/sammystech/Mac-ID">GitHub</a>
+  <a href="https://github.com/sammystech/Mac-ID/releases">Releases</a>
+  <span class="sp">Built on open-source work — see Acknowledgements in the app.</span>
+</div></div></footer>
+
+<script>
+// The buy button is intentionally inert until a payment provider is connected. Better a clear
+// message than a dead link that looks like a bug, or a checkout that takes money and delivers nothing.
+document.getElementById('buy').addEventListener('click', function (e) {
+  e.preventDefault();
+  alert('Checkout is not connected yet.\n\nOnce a payment provider is set up, this button takes your name and email, charges $4.99, and emails you a licence key.');
+});
+</script>
+</body>
+</html>
