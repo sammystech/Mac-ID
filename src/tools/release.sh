@@ -214,18 +214,44 @@ grep -q 'edSignature' "$APPCAST" || die "appcast.xml has no EdDSA signatures —
 echo "  $APPCAST"
 echo "  versions in feed: $(grep -c '<item>' "$APPCAST")"
 
+# ---------------------------------------------------------------- upload staging
+#
+# What actually goes to GitHub, prepared here so none of it is done by hand:
+#   * Delta files come out of generate_appcast named "Mac ID10-9.delta". GitHub's asset upload API
+#     rejects spaces with HTTP 400, so they are copied without them and the appcast URLs rewritten
+#     to match. Safe: each edSignature covers the file's contents, not its name, and the feed as a
+#     whole is not signed. RELEASES_DIR itself is left alone, since generate_appcast reads it back.
+#   * An unversioned Mac-ID.dmg alongside the versioned one. The website links to
+#     releases/latest/download/<file>, and "latest" moves on every release — a versioned filename
+#     404s the moment the next version ships.
+
+UPLOAD_DIR="$BUILD_DIR/upload"
+rm -rf "$UPLOAD_DIR"; mkdir -p "$UPLOAD_DIR"
+cp "$ZIP" "$DMG" "$UPLOAD_DIR/"
+cp "$DMG" "$UPLOAD_DIR/Mac-ID.dmg"
+NEW_BUILD_DELTAS=0
+for delta in "$RELEASES_DIR"/*"$NEXT_BUILD"-*.delta; do
+    [[ -e "$delta" ]] || continue
+    name=$(basename "$delta")
+    cp "$delta" "$UPLOAD_DIR/${name// /}"
+    NEW_BUILD_DELTAS=$((NEW_BUILD_DELTAS + 1))
+done
+sed 's/Mac%20ID\([0-9]*-[0-9]*\.delta\)/MacID\1/g' "$APPCAST" > "$UPLOAD_DIR/appcast.xml"
+echo "  staged $(ls "$UPLOAD_DIR" | wc -l | tr -d ' ') files ($NEW_BUILD_DELTAS deltas) in $UPLOAD_DIR"
+
 # ---------------------------------------------------------------- next steps
 
 say "Built. Nothing has been published yet."
 cat <<EOF
 
-Upload every zip plus the appcast to the new release, because the feed points at
-'releases/latest/download/…' — older versions must stay reachable from the newest release:
+Upload the staged folder. Everything the newest feed entry points at is in it:
 
     gh release create v$VERSION \\
       --title "$APP_NAME $VERSION" \\
       --notes "..." \\
-      "$RELEASES_DIR"/*.zip "$APPCAST" "$DMG"
+      "$UPLOAD_DIR"/*
+
+The website links to .../releases/latest/download/Mac-ID.dmg, so it follows automatically.
 
 Install YOUR OWN copy from the Development-signed build, not the DMG:
 
