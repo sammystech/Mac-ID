@@ -18,6 +18,7 @@
 import AppKit
 import Observation
 import Sparkle
+import Security
 
 @Observable
 @MainActor
@@ -35,6 +36,34 @@ final class UpdaterController {
         get { controller.updater.automaticallyChecksForUpdates }
         set { controller.updater.automaticallyChecksForUpdates = newValue }
     }
+
+    /// True when this copy is signed with an Apple Development certificate — the developer's own
+    /// build, installed from `release.sh`'s local output rather than from a release.
+    ///
+    /// Such a build must never update itself. The public feed carries the build made for other
+    /// people's Macs, which is signed differently; letting Sparkle install it over the developer's
+    /// copy silently swaps the signature, which strands the keychain item holding the stored
+    /// password (it belongs to the Development team) and orphans the Accessibility grant. That
+    /// happened with 1.7, and from the outside it looked like face unlock had simply broken.
+    ///
+    /// Decided from the signing certificate, not from the presence of a provisioning profile:
+    /// Developer ID releases will carry a profile too, and a profile check would then switch updates
+    /// off for every customer.
+    static let isDeveloperBuild: Bool = {
+        var code: SecCode?
+        var staticCode: SecStaticCode?
+        var info: CFDictionary?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+              SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dict = info as? [String: Any],
+              let leaf = (dict[kSecCodeInfoCertificates as String] as? [SecCertificate])?.first,
+              let subject = SecCertificateCopySubjectSummary(leaf) as String?
+        else { return false }   // ad-hoc (no certificate) or unreadable: a normal, updatable release
+        return subject.hasPrefix("Apple Development:")
+    }()
+
+    var isDeveloperBuild: Bool { Self.isDeveloperBuild }
 
     /// True while Sparkle is showing anything, so `AppDelegate.windowWillClose` doesn't drop the Dock icon to `.accessory` mid-update.
     var isPresentingUpdateUI: Bool { presentationDelegate.isPresentingUpdateUI }
@@ -64,11 +93,15 @@ final class UpdaterController {
     /// `SPUStandardUpdaterController` logs and alerts on a misconfigured Sparkle setup itself rather than throwing, so a
     /// placeholder feed URL degrades to "never finds an update" rather than crashing.
     func start() {
+        // Not started at all, rather than started with automatic checks off: a manual "Check for
+        // Updates" would install the public build just as surely.
+        guard !Self.isDeveloperBuild else { return }
         controller.startUpdater()
     }
 
     /// User-initiated "Check for Updates" — shows Sparkle's standard progress UI.
     func checkForUpdates() {
+        guard !Self.isDeveloperBuild else { return }
         controller.checkForUpdates(nil)
     }
 }

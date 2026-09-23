@@ -199,6 +199,32 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
   .foot .sp{margin-left:0; width:100%}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---- purchase / licence key screen ---- */
+.claim{position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
+  padding:16px; background:rgba(6,5,14,.62); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
+.claim[hidden]{display:none}
+.claim-card{position:relative; width:100%; max-width:440px; padding:30px 28px 26px; border-radius:22px; text-align:center}
+.claim-card h3{font-size:1.25rem; margin:14px 0 8px}
+.claim-card p{color:var(--text-dim); font-size:.95rem; line-height:1.55}
+.claim-x{position:absolute; top:12px; right:14px; width:32px; height:32px; border:0; border-radius:10px;
+  background:transparent; color:var(--text-dim); font-size:22px; cursor:pointer}
+.claim-x:hover{background:rgba(255,255,255,.08); color:var(--text)}
+.claim-spin{width:34px; height:34px; margin:4px auto 0; border-radius:50%;
+  border:3px solid rgba(255,255,255,.14); border-top-color:var(--violet-lit); animation:claimspin .9s linear infinite}
+@keyframes claimspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.claim-spin{animation-duration:3s}}
+.claim-key{margin:18px 0 10px; padding:14px 12px; border-radius:14px; background:rgba(0,0,0,.28);
+  border:1px solid var(--edge-lit); font:600 1.22rem/1.2 ui-monospace,"SF Mono",Menlo,monospace;
+  letter-spacing:.06em; color:var(--text); user-select:all; word-break:break-all}
+.claim-steps{margin:14px 0 0; padding:0; list-style:none; text-align:left; font-size:.9rem; color:var(--text-dim)}
+.claim-steps li{padding:5px 0 5px 26px; position:relative}
+.claim-steps li::before{content:counter(step); counter-increment:step; position:absolute; left:0; top:5px;
+  width:18px; height:18px; border-radius:50%; background:rgba(142,114,255,.22); color:var(--violet-lit);
+  font-size:.72rem; font-weight:700; display:flex; align-items:center; justify-content:center}
+.claim-steps{counter-reset:step}
+.claim-ok{width:40px; height:40px; margin:0 auto; border-radius:50%; background:rgba(52,199,89,.16);
+  display:flex; align-items:center; justify-content:center; color:#5BE08A; font-size:22px; font-weight:700}
 </style>
 </head>
 <body>
@@ -324,7 +350,7 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
       <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Free updates, delivered in the app</span></li>
     </ul>
     <a class="btn btn-primary" style="width:100%" href="#" id="buy">Buy a licence</a>
-    <p class="meta" style="margin-top:13px">You'll be asked for your name and email so the key can be sent to you.</p>
+    <p class="meta" style="margin-top:13px">Checkout is handled securely by Lemon Squeezy. Your key appears on this page the moment you’ve paid.</p>
   </div></div>
 </div></section>
 
@@ -367,13 +393,169 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
   <span class="sp">Built on open-source work — see Acknowledgements in the app.</span>
 </div></div></footer>
 
+
+<div id="claim" class="claim" hidden>
+  <div class="claim-card glass" role="dialog" aria-modal="true" aria-labelledby="claim-title">
+    <button class="claim-x" type="button" aria-label="Close">&times;</button>
+    <div id="claim-body"></div>
+  </div>
+</div>
 <script>
-// The buy button is intentionally inert until a payment provider is connected. Better a clear
-// message than a dead link that looks like a bug, or a checkout that takes money and delivers nothing.
-document.getElementById('buy').addEventListener('click', function (e) {
-  e.preventDefault();
-  alert('Checkout is not connected yet.\n\nOnce a payment provider is set up, this button takes your name and email, charges $4.99, and emails you a licence key.');
-});
+(function () {
+  // Paste the product's checkout link from Lemon Squeezy here (Products -> your product -> Share).
+  // While it is empty the button explains that checkout isn't connected, rather than looking like
+  // a dead link or, worse, sending someone to a checkout that can't deliver a key.
+  var CHECKOUT_URL = '';
+
+  var STORE = 'macid-claim';           // this browser's claim token, so a reload doesn't lose the key
+  var POLL_MS = 3000;
+  var POLL_FOR_MS = 30 * 60 * 1000;    // long enough for a slow card check, not forever
+
+  var dialog = document.getElementById('claim');
+  var body = document.getElementById('claim-body');
+  var pollTimer = null, pollUntil = 0, paid = false;
+
+  function save(v) { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch (e) {} }
+  function load() { try { return JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { return null; } }
+
+  // 24 random bytes as base64url. Only this browser ever knows it, which is what lets the page ask
+  // for the key without an account or a password.
+  function newToken() {
+    var bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;   // never innerHTML: names come from the buyer
+    return n;
+  }
+
+  function show(nodes) {
+    body.replaceChildren.apply(body, nodes);
+    dialog.hidden = false;
+    dialog.querySelector('.claim-x').focus();
+  }
+
+  function showWaiting() {
+    show([
+      el('div', 'claim-spin'),
+      el('h3', null, paid ? 'Payment received' : 'Waiting for payment'),
+      el('p', null, paid
+        ? 'Preparing your licence key. This takes a few seconds.'
+        : 'Finish checking out in the window that opened. Your key appears here the moment you’ve paid, so keep this page open.')
+    ]);
+    body.querySelector('h3').id = 'claim-title';
+  }
+
+  function showKey(keys, name) {
+    var first = (name || '').split(' ')[0];
+    var nodes = [el('div', 'claim-ok', '✓'), el('h3', null, first ? 'Thanks, ' + first + '!' : 'Thank you!'),
+                 el('p', null, keys.length > 1 ? 'Your licence keys:' : 'Your licence key:')];
+    keys.forEach(function (k) { nodes.push(el('div', 'claim-key', k)); });
+    var copy = el('button', 'btn btn-primary', 'Copy key');
+    copy.type = 'button';
+    copy.style.width = '100%';
+    copy.addEventListener('click', function () {
+      navigator.clipboard.writeText(keys.join('\n')).then(function () { copy.textContent = 'Copied'; },
+        function () { copy.textContent = 'Select the key and copy it'; });
+    });
+    nodes.push(copy);
+    var steps = el('ol', 'claim-steps');
+    ['Download and open Mac ID.', 'When it asks, paste this key and press Activate.',
+     'Save it somewhere safe. It never expires, and works on any Mac you own.']
+      .forEach(function (t) { steps.appendChild(el('li', null, t)); });
+    nodes.push(steps);
+    show(nodes);
+    body.querySelector('h3').id = 'claim-title';
+  }
+
+  function showDelayed() {
+    show([el('div', 'claim-ok', '✓'), el('h3', null, 'Your order is in'),
+          el('p', null, 'Your payment went through, but your key needs a little longer to prepare. It’ll be emailed to the address you used at checkout.')]);
+    body.querySelector('h3').id = 'claim-title';
+  }
+
+  function poll(token) {
+    clearTimeout(pollTimer);
+    if (Date.now() > pollUntil) return;
+    fetch('/api/claim?token=' + encodeURIComponent(token), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.status === 'ready') {
+          var saved = load() || {};
+          saved.keys = d.keys; saved.name = d.name;
+          save(saved);
+          showKey(d.keys, d.name);
+          return;
+        }
+        if (d && d.status === 'delayed') { showDelayed(); return; }
+        pollTimer = setTimeout(function () { poll(token); }, POLL_MS);
+      })
+      .catch(function () { pollTimer = setTimeout(function () { poll(token); }, POLL_MS); });
+  }
+
+  function startCheckout() {
+    var token = newToken();
+    save({ token: token, created: Date.now() });
+    paid = false;
+    var url = CHECKOUT_URL + (CHECKOUT_URL.indexOf('?') >= 0 ? '&' : '?') +
+              'embed=1&checkout[custom][claim]=' + token;
+    showWaiting();
+    pollUntil = Date.now() + POLL_FOR_MS;
+    poll(token);
+    if (window.LemonSqueezy && LemonSqueezy.Url) {
+      LemonSqueezy.Url.Open(url);          // overlay, stays on this page
+    } else {
+      window.open(url, '_blank');          // script blocked: plain tab; this page keeps polling
+    }
+  }
+
+  document.getElementById('buy').addEventListener('click', function (e) {
+    e.preventDefault();
+    if (!CHECKOUT_URL) {
+      alert('Checkout is not connected yet.\n\nOnce it is, this button takes you through a $4.99 checkout and shows your licence key right here as soon as you’ve paid.');
+      return;
+    }
+    startCheckout();
+  });
+
+  dialog.querySelector('.claim-x').addEventListener('click', function () { dialog.hidden = true; });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dialog.hidden = true; });
+
+  if (CHECKOUT_URL) {
+    var s = document.createElement('script');
+    s.src = 'https://app.lemonsqueezy.com/js/lemon.js';
+    s.defer = true;
+    s.onload = function () {
+      if (window.createLemonSqueezy) window.createLemonSqueezy();
+      if (window.LemonSqueezy && LemonSqueezy.Setup) {
+        LemonSqueezy.Setup({ eventHandler: function (ev) {
+          if (ev && ev.event === 'Checkout.Success') {
+            paid = true;
+            var saved = load();
+            if (saved && saved.token && !saved.keys) { showWaiting(); pollUntil = Date.now() + POLL_FOR_MS; poll(saved.token); }
+          }
+        }});
+      }
+    };
+    document.head.appendChild(s);
+  }
+
+  // Coming back to the page (a reload mid-checkout, or the receipt's link to nmx.net/#key):
+  // pick up where this browser left off instead of losing the key.
+  var saved = load();
+  var fresh = saved && saved.created && Date.now() - saved.created < POLL_FOR_MS;
+  if (saved && saved.keys && location.hash === '#key') {
+    showKey(saved.keys, saved.name);
+  } else if (saved && saved.token && !saved.keys && (fresh || location.hash === '#key')) {
+    showWaiting();
+    pollUntil = Date.now() + POLL_FOR_MS;
+    poll(saved.token);
+  }
+})();
 </script>
 </body>
 </html>

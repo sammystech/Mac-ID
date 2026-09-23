@@ -22,3 +22,10 @@ web/admin/bin/
 # glintr100 CoreML weights: 124 MB, over GitHub's 100 MB file limit. The model ships inside the
 # DMG; see README for how to regenerate it from the published ArcFace weights.
 src/glance/Models/ArcFace.mlpackage/Data/com.apple.CoreML/weights/weight.bin
+
+# Fulfilment service secrets and the record of which keys went to the server.
+web/admin/service-config.json
+web/admin/pool-sent.csv
+web/service/config.json
+web/service/pool*.txt
+web/service/sales.json

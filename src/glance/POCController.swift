@@ -46,9 +46,40 @@ final class POCController {
     /// only sparingly, so the pane is opened directly as well rather than trusting the dialog to
     /// appear.
     func openAccessibilitySettings() {
+        if !KeystrokeInjector.isAccessibilityTrusted() {
+            Self.resetStaleAccessibilityEntry()
+        }
         _ = KeystrokeInjector.promptForAccessibility()
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Removes this app's Accessibility entry so the next prompt creates a fresh one for the binary
+    /// that is actually running.
+    ///
+    /// macOS records the grant against the app's code signature, not just its name. Replace the app
+    /// with a differently signed build — an in-app update of an ad-hoc build changes the signature
+    /// every time — and System Settings keeps showing the old entry with its switch ON while
+    /// `AXIsProcessTrusted()` correctly reports false for the new binary. The user sees a switch that
+    /// is already on, is told Accessibility is off, and has nothing to do. Resetting first makes the
+    /// switch show the truth (off), so turning it on applies to this copy.
+    ///
+    /// Only ever called while untrusted, so it can never remove a grant that is working.
+    private static func resetStaleAccessibilityEntry() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let tccutil = Process()
+        tccutil.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        tccutil.arguments = ["reset", "Accessibility", bundleID]
+        tccutil.standardOutput = FileHandle.nullDevice
+        tccutil.standardError = FileHandle.nullDevice
+        // Must finish before the prompt below re-registers the app, or the prompt's fresh entry
+        // could be the one that gets removed. tccutil returns in milliseconds.
+        do {
+            try tccutil.run()
+            tccutil.waitUntilExit()
+        } catch {
+            injectionLog.error("tccutil reset failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

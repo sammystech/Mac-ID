@@ -74,6 +74,12 @@ tr.revoked{opacity:.42}
 .msg{margin-top:13px;font-size:13px;padding:10px 13px;border-radius:11px;display:none}
 .msg.err{display:block;background:rgba(255,107,122,.12);border:1px solid rgba(255,107,122,.32);color:#FFB3BC}
 .empty{padding:44px 20px;text-align:center;color:var(--faint);font-size:14px}
+.store-status{margin:-4px 2px 12px; font-size:12.5px; color:var(--faint)}
+.store-status.warn{color:#FFB35C}
+.store-status.bad{color:#FF7A7A}
+.tag.store{background:rgba(142,114,255,.16); color:#B9A8FF}
+.tag.test{background:rgba(255,255,255,.08); color:var(--faint)}
+.tag.needs{background:rgba(255,122,122,.16); color:#FF9A9A}
 </style>
 </head>
 <body>
@@ -127,7 +133,9 @@ tr.revoked{opacity:.42}
         <div class="stat glass"><b id="s-total">0</b><span>Issued</span></div>
         <div class="stat glass"><b id="s-paid">0</b><span>Paid</span></div>
         <div class="stat glass"><b id="s-free">0</b><span>Free</span></div>
+        <div class="stat glass"><b id="s-pool">–</b><span>Keys in store pool</span></div>
       </div>
+      <div id="store-status" class="store-status"></div>
       <div class="panel glass">
         <div class="toolbar">
           <input id="search" placeholder="Search name, email or note…" autocomplete="off">
@@ -141,10 +149,46 @@ tr.revoked{opacity:.42}
 
 <script>
 let rows = [];
+let local = [], online = [];
+
+// Online orders arrive from the fulfilment service on the PC. They are shown alongside keys issued
+// here, but they are not written into licenses.json - the PC's sales.json is their record.
+function fromSale(s) {
+  const bits = ['Lemon Squeezy #' + (s.order_number || s.order_id)];
+  if (s.test_mode) bits.push('test purchase');
+  if (s.refunded) bits.push('refunded ' + s.refunded.slice(0, 10) + ' (key still works)');
+  if (!s.key) bits.push('NO KEY SENT - pool was empty, issue one by hand');
+  return {
+    ref: 'ls-' + s.order_id, source: 'store', name: s.name, email: s.email,
+    key: s.key || '', price: (s.total || '').replace(/[^0-9.]/g, '') || '4.99',
+    note: bits.join(' · '), issued: s.created, revoked: s.refunded || '',
+    test: !!s.test_mode, needsKey: !s.key,
+  };
+}
 
 async function refresh() {
-  rows = await (await fetch('/api/licenses')).json();
+  local = await (await fetch('/api/licenses')).json();
+  rows = local.slice();
   render();
+  try {
+    const store = await (await fetch('/api/online-sales')).json();
+    const status = document.getElementById('store-status');
+    if (!store.connected) {
+      status.className = 'store-status bad';
+      status.textContent = 'Online store unreachable: ' + (store.error || 'unknown error') +
+        '. Keys can still be issued by hand.';
+      return;
+    }
+    online = (store.sales || []).map(fromSale);
+    rows = local.concat(online);
+    document.getElementById('s-pool').textContent = store.pool_remaining;
+    const waiting = online.filter(r => r.needsKey).length;
+    status.className = 'store-status' + (waiting || store.pool_remaining < 20 ? ' warn' : '');
+    status.textContent = `Online store connected · ${online.length} order${online.length === 1 ? '' : 's'}` +
+      (waiting ? ` · ${waiting} waiting for a key` : '') +
+      (store.pool_remaining < 20 ? ' · pool is low, top it up' : '');
+    render();
+  } catch (e) { /* the local list is already on screen */ }
 }
 
 function render() {
@@ -153,7 +197,7 @@ function render() {
     (r.name + ' ' + r.email + ' ' + (r.note || '')).toLowerCase().includes(q));
 
   document.getElementById('s-total').textContent = rows.filter(r => !r.revoked).length;
-  document.getElementById('s-paid').textContent  = rows.filter(r => !r.revoked && r.price !== '0').length;
+  document.getElementById('s-paid').textContent  = rows.filter(r => !r.revoked && !r.test && r.price !== '0').length;
   document.getElementById('s-free').textContent  = rows.filter(r => !r.revoked && r.price === '0').length;
 
   const wrap = document.getElementById('tablewrap');
@@ -169,11 +213,14 @@ function render() {
           ${r.note ? `<span style="display:block;margin-top:3px">${esc(r.note)}</span>` : ''}</td>
         <td><div class="key">${esc(r.key)}</div>
           <span class="tag ${r.revoked ? 'void' : (r.price === '0' ? 'free' : 'paid')}">
-            ${r.revoked ? 'void' : (r.price === '0' ? 'free' : '$' + r.price)}</span></td>
+            ${r.revoked ? (r.source === 'store' ? 'refunded' : 'void') : (r.price === '0' ? 'free' : '$' + r.price)}</span>
+          ${r.source === 'store' ? '<span class="tag store">online</span>' : ''}
+          ${r.test ? '<span class="tag test">test</span>' : ''}
+          ${r.needsKey ? '<span class="tag needs">needs key</span>' : ''}</td>
         <td style="color:var(--faint);font-size:12.5px">${(r.issued || '').replace('T', ' ').replace('+00:00', '')}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm" onclick="copyKey('${r.ref}')">Copy</button>
-          <button class="btn btn-sm" onclick="toggle('${r.ref}')">${r.revoked ? 'Restore' : 'Void'}</button></td>
+          ${r.source === 'store' ? '' : `<button class="btn btn-sm" onclick="toggle('${r.ref}')">${r.revoked ? 'Restore' : 'Void'}</button>`}</td>
       </tr>`).join('') + '</tbody></table>';
 }
 

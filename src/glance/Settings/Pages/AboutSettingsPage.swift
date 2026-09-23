@@ -106,6 +106,13 @@ struct AboutSettingsPage: View {
         }
         .padding(.bottom, 12)
 
+        if updater.isDeveloperBuild {
+            // Otherwise the disabled Check button looks like a fault.
+            SettingsCaption(text: "Developer build: updates are off, so a release can't replace this copy. "
+                + "Install new versions from release.sh's local build instead.")
+                .padding(.bottom, 8)
+        }
+
         SettingsGroup {
             SettingsActionRowContent(
                 title: "Check for Updates",

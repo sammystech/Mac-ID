@@ -25,6 +25,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 STORE = os.path.join(HERE, "licenses.json")
 LICENSE_TOOL = os.path.join(HERE, "bin", "macid-license")
+# URL + admin token for the fulfilment service on the Windows box (see web/service/fulfil.py).
+# Gitignored: the token reads every buyer's name and email.
+SERVICE_CONFIG = os.path.join(HERE, "service-config.json")
 HOST, PORT = "127.0.0.1", 8787
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -77,6 +80,30 @@ def verify(key):
                           capture_output=True, text=True).returncode == 0
 
 
+# ----------------------------------------------------------------- online store
+
+def online_sales():
+    """Sales from the Lemon Squeezy fulfilment service. Never raises: the dashboard must still work
+    for issuing keys by hand when the PC or the tunnel is down."""
+    import urllib.request
+    if not os.path.exists(SERVICE_CONFIG):
+        return {"connected": False, "error": "service-config.json not found", "sales": []}
+    with open(SERVICE_CONFIG) as fh:
+        cfg = json.load(fh)
+    # A real User-Agent is required, not decoration: Cloudflare's Browser Integrity Check rejects
+    # Python's default "Python-urllib/3.x" with error 1010 before the request reaches the PC.
+    req = urllib.request.Request(cfg["service_url"].rstrip("/") + "/api/sales",
+                                 headers={"Authorization": "Bearer " + cfg["admin_token"],
+                                          "User-Agent": "MacID-Admin/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.load(resp)
+        data["connected"] = True
+        return data
+    except Exception as exc:  # noqa: BLE001
+        return {"connected": False, "error": str(exc), "sales": []}
+
+
 # ----------------------------------------------------------------- server
 
 class Handler(BaseHTTPRequestHandler):
@@ -100,11 +127,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, fh.read(), "text/html; charset=utf-8")
         if path == "/api/licenses":
             return self._send(200, json.dumps(load()))
+        if path == "/api/online-sales":
+            return self._send(200, json.dumps(online_sales()))
         if path == "/api/export.csv":
             rows = load()
             out = ["name,email,key,license_id,price,note,issued,revoked"]
             for r in rows:
                 out.append(",".join('"' + str(r.get(k, "")).replace('"', '""') + '"'
+                                    for k in ("name", "email", "key", "license_id",
+                                              "price", "note", "issued", "revoked")))
+            # Online orders too, so the export is the complete list of who has a licence.
+            for sale in online_sales().get("sales", []):
+                note = f"Lemon Squeezy order {sale.get('order_number') or sale.get('order_id')}"
+                if sale.get("test_mode"):
+                    note += " (test)"
+                row = {"name": sale.get("name"), "email": sale.get("email"), "key": sale.get("key") or "",
+                       "license_id": "", "price": (sale.get("total") or "").lstrip("$"), "note": note,
+                       "issued": sale.get("created"), "revoked": sale.get("refunded") or ""}
+                out.append(",".join('"' + str(row[k] or "").replace('"', '""') + '"'
                                     for k in ("name", "email", "key", "license_id",
                                               "price", "note", "issued", "revoked")))
             return self._send(200, "\n".join(out), "text/csv")

@@ -47,8 +47,9 @@ struct GeneralSettingsPage: View {
                         }
                     }
                 }
-                SettingsCaption(text: "In System Settings, switch on Mac ID under Privacy & Security → Accessibility. "
-                    + "If Mac ID isn't in the list, pressing Turn On adds it.")
+                SettingsCaption(text: "Press Turn On, then switch on Mac ID in the window that opens. "
+                    + "If the switch already looked on, it belonged to an earlier copy of the app — "
+                    + "updating replaces it — and pressing Turn On clears it so the new one takes effect.")
             }
             .padding(.bottom, 12)
             .onAppear { pocController.refreshAccessibilityStatus() }
