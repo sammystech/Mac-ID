@@ -191,6 +191,13 @@ def handle_order_created(config, payload):
         log(f"order {order_id}: status {attrs.get('status')!r}, not issuing")
         return 200, {"ok": True, "issued": False}
 
+    # A test-mode checkout is paid with Lemon Squeezy's public test card, so anyone who finds it could
+    # "buy" a real, working key for nothing. Test orders only draw from the pool while
+    # `allow_test_orders` is switched on for a deliberate end-to-end test.
+    if attrs.get("test_mode") and not config.get("allow_test_orders"):
+        log(f"order {order_id}: test-mode order ignored (allow_test_orders is off)")
+        return 200, {"ok": True, "issued": False, "ignored": "test order"}
+
     custom = (payload.get("meta") or {}).get("custom_data") or {}
     claim = str(custom.get("claim") or "")
     if claim and not CLAIM_RE.match(claim):

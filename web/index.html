@@ -528,6 +528,9 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
         LemonSqueezy.Setup({ eventHandler: function (ev) {
           if (ev && ev.event === 'Checkout.Success') {
             paid = true;
+            // Close Lemon Squeezy's own thank-you box. Left open, it sits on top of the key screen
+            // and its button navigates away, so a buyer could pay and never see their key.
+            try { if (LemonSqueezy.Url && LemonSqueezy.Url.Close) LemonSqueezy.Url.Close(); } catch (e) {}
             var saved = load();
             if (saved && saved.token && !saved.keys) { showWaiting(); pollUntil = Date.now() + POLL_FOR_MS; poll(saved.token); }
           }
