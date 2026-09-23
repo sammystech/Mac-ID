@@ -34,7 +34,10 @@ enum KeychainError: LocalizedError {
 }
 
 enum KeychainManager {
-    nonisolated static let service = "com.samuelmittman.macid"
+    /// The bundle ID, so items belong to whichever identity the app is running as. A fixed string
+    /// here once meant a renamed app went looking for its predecessor's items — found them, and hit
+    /// keychain access prompts for data it could never decrypt anyway.
+    nonisolated static let service = Bundle.main.bundleIdentifier ?? "com.garymittman.macid"
 
     /// Attributes-only existence check — never prompts, even for access-controlled items.
     nonisolated static func exists(account: String) -> Bool {

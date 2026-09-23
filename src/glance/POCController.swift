@@ -19,6 +19,9 @@ final class POCController {
     var hasStoredPassword: Bool = SecureCredentialManager.hasStoredPassword()
     var isSessionUnlocked: Bool = SecureCredentialManager.isSessionUnlocked
     var sessionError: String? = nil
+    /// Set when unlocking failed because the key is gone but data encrypted under it remains — the one
+    /// session failure Touch ID can't fix, so the Password page offers to start over instead.
+    var sessionKeyUnrecoverable = false
 
     /// Bound to the setup SecureField. Cleared immediately after a successful save.
     var passwordInput: String = ""
@@ -160,9 +163,11 @@ final class POCController {
                 try SecureCredentialManager.unlockSession(reason: "Authenticate to set up or use Mac ID")
             }.value
             isSessionUnlocked = true
+            sessionKeyUnrecoverable = false
         } catch {
             isSessionUnlocked = false
             sessionError = error.localizedDescription
+            if case SecureCredentialError.sessionKeyUnavailable = error { sessionKeyUnrecoverable = true }
         }
     }
 

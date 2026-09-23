@@ -82,6 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LegacyMigration.finishLaunch()
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         // Custom mark, not an SF Symbol; `isTemplate` is cheap insurance against a plain black-square render.
         let icon = NSImage(named: "MenuBarIcon")

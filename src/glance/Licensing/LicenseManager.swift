@@ -43,7 +43,10 @@ enum LicenseError: LocalizedError {
 @Observable
 @MainActor
 final class LicenseManager {
-    static let shared = LicenseManager()
+    static let shared: LicenseManager = {
+        LegacyMigration.migrateIfNeeded()
+        return LicenseManager()
+    }()
 
     /// Retained only to keep pre-existing long keys working. New keys are HMAC-based.
     private static let publicKeyBase64 = "IuNM6yWM8lpbEkTqMilwwRdImSb/qqMh1OnRa0hnejk="

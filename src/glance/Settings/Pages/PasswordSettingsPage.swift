@@ -75,14 +75,25 @@ struct PasswordSettingsPage: View {
     // MARK: - Locked
 
     private var lockedState: some View {
-        SettingsEmptyStateView(
-            icon: "lock.fill",
-            message: "Session locked",
-            buttonTitle: isUnlocking ? "Authenticating…" : "Unlock session",
-            isButtonEnabled: !isUnlocking,
-            caption: sessionError,
-            action: unlock
-        )
+        VStack(spacing: 14) {
+            SettingsEmptyStateView(
+                icon: "lock.fill",
+                message: "Session locked",
+                buttonTitle: isUnlocking ? "Authenticating…" : "Unlock session",
+                isButtonEnabled: !isUnlocking,
+                caption: sessionError,
+                action: unlock
+            )
+            // The way out when the key that decrypts the stored password is gone for good — after a
+            // re-signed build or a change of app identity. Unlocking can never succeed then, and the
+            // only other delete button lives in the unlocked view, which this state never reaches.
+            // Deleting needs no key, so this works exactly when nothing else can.
+            if pocController.sessionKeyUnrecoverable {
+                HoldToConfirmButton(title: "Start Over", action: removePassword)
+                SettingsCaption(text: "Removes the stored password and face data, so you can set both up again. "
+                    + "Your licence and settings are kept.")
+            }
+        }
     }
 
     // MARK: - Unlocked
@@ -169,6 +180,7 @@ struct PasswordSettingsPage: View {
         do {
             FaceEnrollmentStore.shared.deleteAll()
             try SecureCredentialManager.deletePassword()
+            pocController.sessionKeyUnrecoverable = false
             pocController.refreshCredentialStatus()
             statusMessage = "Password and face enrollment removed."
         } catch {

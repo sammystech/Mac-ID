@@ -11,13 +11,21 @@
 #   * Sparkle's tools (generate_appcast, sign_update) from the SPM checkout
 #   * The EdDSA private key in the login keychain (created once by generate_keys)
 #   * SUFeedURL in Info.plist pointing at a real repo
-#   * For anyone else's Mac: a Developer ID Application certificate and notarization
+#   * Xcode signed in to the team in DEVELOPMENT_TEAM, with its Developer ID Application
+#     certificate in the login keychain. Notarization goes through that same Xcode sign-in, so no
+#     app-specific password or notarytool profile is needed.
 #
 set -euo pipefail
 
 VERSION="${1:-}"
+# --resume: carry on from a build already submitted to Apple, instead of re-archiving and uploading
+# again. A new team's first notarization can take hours; starting over puts it back in the queue.
+RESUME=0
+[[ "${2:-}" == "--resume" ]] && RESUME=1
+# Minutes to wait for Apple before giving up (the build stays submitted; --resume picks it up).
+NOTARIZE_WAIT_MIN="${NOTARIZE_WAIT_MIN:-30}"
 if [[ -z "$VERSION" ]]; then
-    echo "usage: ./tools/release.sh <version>    e.g. ./tools/release.sh 1.3" >&2
+    echo "usage: ./tools/release.sh <version> [--resume]    e.g. ./tools/release.sh 1.3" >&2
     exit 1
 fi
 
@@ -57,8 +65,10 @@ PUB_KEY=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$INFO_PLIST" 2>/dev
 # Resolved after the build, since SwiftPM checks Sparkle out into whichever derived-data
 # directory built the app — and this script builds into its own.
 find_sparkle_bin() {
-    find "$BUILD_DIR" ~/Library/Developer/Xcode/DerivedData \
-        -path '*artifacts/sparkle/Sparkle/bin' -type d 2>/dev/null | head -1
+    # `|| true` matters: find exits non-zero when any search root is missing or unreadable, and under
+    # `pipefail` that killed the script silently, straight after a successful archive.
+    { find "$BUILD_DIR" ~/Library/Developer/Xcode/DerivedData \
+        -path '*artifacts/sparkle/Sparkle/bin' -type d 2>/dev/null || true; } | head -1
 }
 
 say "Releasing $APP_NAME $VERSION"
@@ -69,111 +79,108 @@ echo "  pub key:  $PUB_KEY"
 # ---------------------------------------------------------------- version
 
 CURRENT_BUILD=$(grep 'CURRENT_PROJECT_VERSION = ' "$PROJECT/project.pbxproj" | head -1 | sed -E 's/.*= ([0-9]+);/\1/')
-NEXT_BUILD=$((CURRENT_BUILD + 1))
-say "Version $VERSION, build $NEXT_BUILD (was build $CURRENT_BUILD)"
-sed -i '' -E "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $VERSION;/g" "$PROJECT/project.pbxproj"
-sed -i '' -E "s/CURRENT_PROJECT_VERSION = [0-9]+;/CURRENT_PROJECT_VERSION = $NEXT_BUILD;/g" "$PROJECT/project.pbxproj"
-
-# ---------------------------------------------------------------- build
-
-say "Building"
-rm -rf "$BUILD_DIR"
-# -allowProvisioningUpdates: the Mac Development profile is short-lived and Xcode silently lets it
-# go stale, which fails the build with "profile doesn't include signing certificate". This renews it.
-xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
-    -derivedDataPath "$BUILD_DIR" -allowProvisioningUpdates build > "$BUILD_DIR.log" 2>&1 \
-    || { tail -40 "$BUILD_DIR.log"; die "Build failed. Full log: $BUILD_DIR.log"; }
-
-APP="$BUILD_DIR/Build/Products/Release/$APP_NAME.app"
-[[ -d "$APP" ]] || die "Built app not found at $APP"
-
-# ---------------------------------------------------------------- distribution signing
-#
-# The build above is signed with an Apple Development certificate and carries a Mac Team
-# provisioning profile. That profile lists the UDIDs of registered Macs, and macOS refuses to launch
-# a Development-signed app on a machine that is not in it — which is why a shipped DMG opened with
-# "the application cannot be opened" on someone else's Mac. It was not Gatekeeper and no amount of
-# right-clicking fixed it.
-#
-# So the app is re-signed here for distribution: profile removed, and signed ad-hoc. That is not as
-# good as a Developer ID certificate plus notarization, which is the only way to get a clean
-# double-click. It needs a paid Apple Developer account. Until then, ad-hoc at least runs everywhere
-# after the user approves it once in System Settings.
-
-SPARKLE_BIN=$(find_sparkle_bin)
-[[ -n "$SPARKLE_BIN" ]] || die "Built the app but still can't find Sparkle's tools under $BUILD_DIR."
-
-say "Re-signing for distribution"
-
-# Re-sign a COPY, never the built app itself. The Development-signed original is what belongs on
-# your own Macs: it keeps the keychain-access-group (so it can still read the password you already
-# stored) and a certificate-based designated requirement (so the Accessibility grant survives a
-# rebuild). Installing the ad-hoc distributable locally breaks both — it lands in a different
-# keychain group and its DR is the binary hash, which is exactly how "it won't unlock, something
-# about permissions" happens.
-LOCAL_APP="$APP"
-APP="$BUILD_DIR/dist-app/$APP_NAME.app"
-rm -rf "$BUILD_DIR/dist-app"; mkdir -p "$BUILD_DIR/dist-app"
-cp -R "$LOCAL_APP" "$APP"
-echo "  local (Development-signed) build kept at:"
-echo "    $LOCAL_APP"
-
-rm -f "$APP/Contents/embedded.provisionprofile"
-echo "  removed the device-locked provisioning profile"
-
-# Camera only. The build inherits keychain-access-groups (needs a profile to be valid) and
-# get-task-allow (lets any process attach a debugger — never ship it). The app is not sandboxed and
-# never sets kSecAttrAccessGroup, so its keychain items live in the default group and need no
-# entitlement at all.
-DIST_ENTITLEMENTS="$BUILD_DIR/dist.entitlements"
-cat > "$DIST_ENTITLEMENTS" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>com.apple.security.device.camera</key>
-	<true/>
-</dict>
-</plist>
-PLIST
-
-# Strictly deepest-first. Signing a bundle seals a hash of everything inside it, so anything signed
-# afterwards invalidates its parent — which shows up later as "code object is not signed at all" or
-# a bare "file modified" from codesign --verify.
-SPK="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
-for target in \
-    "$SPK/XPCServices/Downloader.xpc" \
-    "$SPK/XPCServices/Installer.xpc" \
-    "$SPK/Updater.app" \
-    "$SPK/Autoupdate" \
-    "$APP/Contents/Frameworks/Sparkle.framework" ; do
-    [[ -e "$target" ]] || continue
-    codesign --force --sign - --timestamp=none "$target" >/dev/null 2>&1 \
-        || die "Failed to re-sign $(basename "$target")"
-    echo "  signed $(basename "$target")"
-done
-codesign --force --sign - --entitlements "$DIST_ENTITLEMENTS" --timestamp=none "$APP" >/dev/null 2>&1 \
-    || die "Failed to re-sign the app."
-echo "  signed $APP_NAME.app"
-
-codesign --verify --deep --strict "$APP" || die "Signature does not verify after re-signing."
-
-# dyld refuses to load an embedded framework whose Team ID differs from the host's. Ad-hoc signing
-# leaves both unset, which matches — but only if Sparkle really was re-signed above. When it was not,
-# the app dies in dyld before main, which is exactly the crash that shipped once already.
-SIGINFO=$(codesign -d --verbose=2 "$APP" 2>&1 || true)
-APP_TEAM=$(printf '%s\n' "$SIGINFO" | grep TeamIdentifier | head -1 | cut -d= -f2)
-FW="$APP/Contents/Frameworks/Sparkle.framework"
-if [[ -d "$FW" ]]; then
-    FW_INFO=$(codesign -d --verbose=2 "$FW" 2>&1 || true)
-    FW_TEAM=$(printf '%s\n' "$FW_INFO" | grep TeamIdentifier | head -1 | cut -d= -f2)
-    [[ "$APP_TEAM" == "$FW_TEAM" ]] \
-        || die "Sparkle Team ID ($FW_TEAM) != app Team ID ($APP_TEAM). The app would crash in dyld at launch."
-    echo "  team ids match: ${APP_TEAM:-<ad-hoc, unset>}"
+if [[ $RESUME -eq 1 ]]; then
+    # The earlier run already bumped the numbers; bumping again would describe a build that doesn't exist.
+    CURRENT_MARKETING=$(grep 'MARKETING_VERSION = ' "$PROJECT/project.pbxproj" | head -1 | sed -E 's/.*= ([^;]+);/\1/')
+    [[ "$CURRENT_MARKETING" == "$VERSION" ]] \
+        || die "--resume: the project is at $CURRENT_MARKETING, not $VERSION."
+    NEXT_BUILD=$CURRENT_BUILD
+    say "Resuming version $VERSION, build $NEXT_BUILD"
+else
+    NEXT_BUILD=$((CURRENT_BUILD + 1))
+    say "Version $VERSION, build $NEXT_BUILD (was build $CURRENT_BUILD)"
+    sed -i '' -E "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $VERSION;/g" "$PROJECT/project.pbxproj"
+    sed -i '' -E "s/CURRENT_PROJECT_VERSION = [0-9]+;/CURRENT_PROJECT_VERSION = $NEXT_BUILD;/g" "$PROJECT/project.pbxproj"
 fi
 
-[[ ! -e "$APP/Contents/embedded.provisionprofile" ]] \
-    || die "A provisioning profile is still embedded — this build would not launch on other Macs."
+# ---------------------------------------------------------------- build, sign, notarize
+#
+# archive -> export with Developer ID -> Apple notarizes -> export the stapled app. One build for
+# everyone, the developer's own Mac included: a Developer ID signature stays the same across
+# releases, so the Accessibility grant survives updates, and its provisioning profile covers every
+# Mac, so the keychain group that keeps the stored password behind Touch ID works everywhere.
+
+TEAM_ID=$(grep -o 'DEVELOPMENT_TEAM = [A-Z0-9]*;' "$PROJECT/project.pbxproj" | head -1 | sed -E 's/.*= ([A-Z0-9]+);/\1/')
+[[ -n "$TEAM_ID" ]] || die "No DEVELOPMENT_TEAM in the project."
+SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application:.*($TEAM_ID)" | head -1 | sed -E 's/.*"(.+)"/\1/')
+[[ -n "$SIGN_IDENTITY" ]] || die "No 'Developer ID Application' certificate for team $TEAM_ID in the login keychain.
+  Xcode -> Settings -> Accounts -> (the team) -> Manage Certificates -> + -> Developer ID Application"
+echo "  signing as: $SIGN_IDENTITY"
+
+ARCHIVE="$BUILD_DIR/MacID.xcarchive"
+if [[ $RESUME -eq 1 ]]; then
+    [[ -d "$ARCHIVE" ]] || die "--resume: no archive at $ARCHIVE to resume from."
+    ARCHIVED_BUILD=$(/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleVersion" "$ARCHIVE/Info.plist" 2>/dev/null || echo "")
+    [[ "$ARCHIVED_BUILD" == "$NEXT_BUILD" ]] || die "--resume: the archive is build $ARCHIVED_BUILD, expected $NEXT_BUILD."
+    say "Resuming from the submitted archive (build $ARCHIVED_BUILD)"
+else
+say "Archiving"
+rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
+xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
+    -archivePath "$ARCHIVE" -derivedDataPath "$BUILD_DIR/dd" -allowProvisioningUpdates archive \
+    > "$BUILD_DIR/archive.log" 2>&1 \
+    || { grep -E "error:" "$BUILD_DIR/archive.log" | sort -u | head -20; die "Archive failed. Full log: $BUILD_DIR/archive.log"; }
+
+say "Signing with Developer ID and submitting to Apple for notarization"
+cat > "$BUILD_DIR/ExportOptions.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>method</key><string>developer-id</string>
+    <key>destination</key><string>upload</string>
+    <key>signingStyle</key><string>automatic</string>
+    <key>teamID</key><string>$TEAM_ID</string>
+</dict></plist>
+PLIST
+xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$BUILD_DIR/ExportOptions.plist" \
+    -exportPath "$BUILD_DIR/upload-receipt" -allowProvisioningUpdates > "$BUILD_DIR/export.log" 2>&1 \
+    || { grep -iE "error" "$BUILD_DIR/export.log" | sort -u | head -20; die "Export/upload failed. Full log: $BUILD_DIR/export.log"; }
+echo "  uploaded; waiting for Apple (usually a few minutes)"
+fi   # end of the non-resume archive + upload
+
+SPARKLE_BIN=$(find_sparkle_bin)
+[[ -n "$SPARKLE_BIN" ]] || die "Can't find Sparkle's tools under $BUILD_DIR."
+
+NOTARIZED="$BUILD_DIR/notarized"
+rm -rf "$NOTARIZED"
+POLLS=$(( NOTARIZE_WAIT_MIN * 60 / 25 ))
+for attempt in $(seq 1 $POLLS); do
+    if xcodebuild -exportNotarizedApp -archivePath "$ARCHIVE" -exportPath "$NOTARIZED" \
+            > "$BUILD_DIR/notarize.log" 2>&1; then
+        echo "  notarized after ~$((attempt * 25))s"
+        break
+    fi
+    # Checked before the rejection test: this failure mentions "Invalid credentials", and matching
+    # "invalid" first reported a signed-out Xcode as Apple rejecting the app.
+    if grep -qE "No Accounts|missing Xcode-Username|DVTDeveloperAccountCredentialsError" "$BUILD_DIR/notarize.log"; then
+        die "Xcode has lost its sign-in, so it can't ask Apple for the result. Nothing was rejected.
+  Xcode -> Settings -> Accounts -> sign in to the team, then:
+      ./tools/release.sh $VERSION --resume"
+    fi
+    if grep -qiE "rejected|not accepted|status: invalid|The software asset has an invalid" "$BUILD_DIR/notarize.log"; then
+        grep -iE "error|invalid|reject" "$BUILD_DIR/notarize.log" | head -10
+        die "Apple rejected the submission. Details: Xcode -> Window -> Organizer -> this archive."
+    fi
+    [[ $attempt -eq $POLLS ]] && die "Still not notarized after $NOTARIZE_WAIT_MIN minutes. It stays submitted; pick it up with:
+      ./tools/release.sh $VERSION --resume"
+    sleep 25
+done
+
+APP="$NOTARIZED/$APP_NAME.app"
+[[ -d "$APP" ]] || die "Notarized app not found at $APP"
+
+say "Checking what Gatekeeper will see"
+codesign --verify --deep --strict "$APP" || die "Signature does not verify."
+xcrun stapler validate "$APP" >/dev/null 2>&1 || die "No notarization ticket stapled to the app."
+ASSESS=$(spctl -a -t exec -vv "$APP" 2>&1 || true)
+echo "$ASSESS" | sed 's/^/  /'
+echo "$ASSESS" | grep -q "source=Notarized Developer ID" \
+    || die "Gatekeeper does not accept this as a notarized Developer ID app."
+[[ -e "$APP/Contents/embedded.provisionprofile" ]] \
+    || die "No provisioning profile embedded: the keychain group would be refused and the app killed at launch."
+security cms -D -i "$APP/Contents/embedded.provisionprofile" 2>/dev/null | grep -q "<key>ProvisionsAllDevices</key>" \
+    || die "The embedded profile is limited to specific Macs - it would refuse to launch everywhere else."
+echo "  profile provisions every Mac"
 
 # ---------------------------------------------------------------- package
 
@@ -198,6 +205,11 @@ cp -R "$APP" "$DMG_ROOT/"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_ROOT" -ov -format UDZO -fs HFS+ "$DMG" >/dev/null 2>&1
 rm -rf "$DMG_ROOT"
+# Deliberately NOT signed. Measured with a quarantined copy: an unsigned DMG is simply not judged
+# ("no usable signature") and mounts, while a Developer-ID-signed DMG that isn't itself notarized is
+# rejected outright ("Unnotarized Developer ID"). Signing it would only help if it were notarized
+# too, which needs notarytool credentials this setup doesn't have. The app inside carries its own
+# stapled ticket, and that is what Gatekeeper checks when it's first opened.
 echo "  $(du -h "$DMG" | cut -f1)  $DMG"
 
 # ---------------------------------------------------------------- appcast
@@ -233,10 +245,38 @@ NEW_BUILD_DELTAS=0
 for delta in "$RELEASES_DIR"/*"$NEXT_BUILD"-*.delta; do
     [[ -e "$delta" ]] || continue
     name=$(basename "$delta")
+    from=$(echo "$name" | sed -E 's/.*-([0-9]+)\.delta$/\1/')
+    # A delta from the previous identity can never be applied (see FIRST_NEW_ID_BUILD below).
+    [[ "$from" -ge 12 ]] || continue
     cp "$delta" "$UPLOAD_DIR/${name// /}"
     NEW_BUILD_DELTAS=$((NEW_BUILD_DELTAS + 1))
 done
 sed 's/Mac%20ID\([0-9]*-[0-9]*\.delta\)/MacID\1/g' "$APPCAST" > "$UPLOAD_DIR/appcast.xml"
+
+# Builds below FIRST_NEW_ID_BUILD are the app's previous identity (com.samuelmittman.macid). Sparkle
+# refuses to install an update with a different bundle ID ("Failed to match host bundle identifiers"),
+# so for those copies every newer release is marked informational: they're told a new version exists
+# and sent to the website, instead of being offered an install that fails. Copies on the current
+# identity see ordinary updates. Applied to the staged copy only; generate_appcast keeps its own file.
+FIRST_NEW_ID_BUILD=12
+python3 - "$UPLOAD_DIR/appcast.xml" "$FIRST_NEW_ID_BUILD" <<'INFORMATIONAL'
+import re, sys
+path, first = sys.argv[1], int(sys.argv[2])
+feed = open(path).read()
+def mark(match):
+    item = match.group(0)
+    build = re.search(r"<sparkle:version>(\d+)</sparkle:version>", item)
+    if not build or int(build.group(1)) < first or "informationalUpdate" in item:
+        return item
+    extra = ("    <link>https://nmx.net</link>\n"
+             "            <sparkle:informationalUpdate>\n"
+             f"                <sparkle:belowVersion>{first}</sparkle:belowVersion>\n"
+             "            </sparkle:informationalUpdate>\n        ")
+    return item.replace("</item>", extra + "</item>")
+open(path, "w").write(re.sub(r"<item>.*?</item>", mark, feed, flags=re.S))
+INFORMATIONAL
+grep -q "belowVersion>$FIRST_NEW_ID_BUILD<" "$UPLOAD_DIR/appcast.xml" \
+    || die "Couldn't mark the release informational for the old identity - old copies would try an install that fails."
 echo "  staged $(ls "$UPLOAD_DIR" | wc -l | tr -d ' ') files ($NEW_BUILD_DELTAS deltas) in $UPLOAD_DIR"
 
 # ---------------------------------------------------------------- next steps
@@ -253,10 +293,9 @@ Upload the staged folder. Everything the newest feed entry points at is in it:
 
 The website links to .../releases/latest/download/Mac-ID.dmg, so it follows automatically.
 
-Install YOUR OWN copy from the Development-signed build, not the DMG:
+The same notarized build is the one for this Mac too:
 
-    rm -rf "$HOME/mac-id/$APP_NAME.app"
-    cp -R "$LOCAL_APP" "$HOME/mac-id/$APP_NAME.app"
+    ditto "$APP" "$HOME/mac-id/$APP_NAME.app"
 
 Then confirm the feed is actually live before trusting it:
 
@@ -264,12 +303,3 @@ Then confirm the feed is actually live before trusting it:
     curl -s ${FEED_URL} | head -20
 
 EOF
-
-warn "This build is ad-hoc signed, so Gatekeeper will block it on first launch. Everyone
-  installing it has to approve it once:
-      System Settings -> Privacy & Security -> scroll down -> Open Anyway
-
-  Removing that step needs a paid Apple Developer account:
-      1. Create a 'Developer ID Application' certificate
-      2. Sign with it instead of ad-hoc here
-      3. xcrun notarytool submit --wait, then xcrun stapler staple"

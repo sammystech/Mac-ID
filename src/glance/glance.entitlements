@@ -12,7 +12,7 @@
 	     profile. It must match the DEVELOPMENT_TEAM the app is signed with. -->
 	<key>keychain-access-groups</key>
 	<array>
-		<string>G2LCW65DC4.com.samuelmittman.macid</string>
+		<string>$(AppIdentifierPrefix)com.garymittman.macid</string>
 	</array>
 	<key>com.apple.security.device.camera</key>
 	<true/>

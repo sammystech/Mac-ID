@@ -23,7 +23,11 @@ nonisolated enum SecureFaceStore {
     /// Distinct filename/extension so plaintext can never be mistaken for ciphertext.
     private static let fileURL: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let directory = appSupport.appendingPathComponent("Mac ID", isDirectory: true)
+        // Per bundle ID, not per app name: the name survives an identity change and the data doesn't.
+        // Under a shared "Mac ID" folder a renamed app found its predecessor's face file, couldn't
+        // decrypt it, and refused to set up — `hasSessionEncryptedData` treats any existing file as
+        // data it must not overwrite.
+        let directory = appSupport.appendingPathComponent(Bundle.main.bundleIdentifier ?? "Mac ID", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("face-identities.enc")
     }()

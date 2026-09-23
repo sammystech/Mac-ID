@@ -87,7 +87,10 @@ enum UnlockTrigger: String, CaseIterable, Identifiable {
 @Observable
 @MainActor
 final class AppSettings {
-    static let shared = AppSettings()
+    static let shared: AppSettings = {
+        LegacyMigration.migrateIfNeeded()
+        return AppSettings()
+    }()
 
     private enum Key {
         static let isFaceUnlockEnabled = "GlanceSettings.isFaceUnlockEnabled"

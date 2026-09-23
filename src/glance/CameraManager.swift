@@ -58,7 +58,7 @@ final class CameraManager: NSObject {
             errorMessage = "Camera access not granted (status: \(describe(status))). " +
                 (status == .restricted
                     ? "macOS reports this as *restricted* — not a simple user denial. This usually means Screen Time content restrictions or an MDM/profile policy is blocking camera access for this app; toggling it in System Settings > Privacy & Security > Camera won't help until that restriction is lifted."
-                    : "Enable it in System Settings > Privacy & Security > Camera. If Mac ID isn't listed there, quit the app, run `tccutil reset Camera com.samuelmittman.macid` in Terminal, then relaunch so macOS asks again.")
+                    : "Enable it in System Settings > Privacy & Security > Camera. If Mac ID isn't listed there, quit the app, run `tccutil reset Camera \(Bundle.main.bundleIdentifier ?? "com.garymittman.macid")` in Terminal, then relaunch so macOS asks again.")
             return
         }
 
