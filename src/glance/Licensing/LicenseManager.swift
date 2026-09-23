@@ -29,6 +29,8 @@ import Observation
 enum LicenseError: LocalizedError {
     case malformed
     case badSignature
+    case alreadyActivatedElsewhere
+    case activationUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +38,10 @@ enum LicenseError: LocalizedError {
             return "That doesn't look like a Mac ID licence key. It should be 16 characters, like ABCD-EFGH-JKMN-PQRS."
         case .badSignature:
             return "That key isn't valid. Check for a typo, or paste it again from your email."
+        case .alreadyActivatedElsewhere:
+            return "This key is already activated on another Mac. Each key works on one Mac. Moving to a new Mac? Email \(AboutSettingsPage.supportEmail) and we'll move it for you."
+        case .activationUnavailable:
+            return "Couldn't reach the activation server. Check your internet connection and try again."
         }
     }
 }
@@ -52,34 +58,80 @@ final class LicenseManager {
     private static let publicKeyBase64 = "IuNM6yWM8lpbEkTqMilwwRdImSb/qqMh1OnRa0hnejk="
 
     private static let storageKey = "GlanceSettings.licenseKey"
+    /// Proof from the fulfilment service that the stored key belongs to THIS Mac. See Activation.swift.
+    private static let receiptKey = "MacID.activationReceipt"
 
     private(set) var licenseID: UInt64?
-    /// Re-derived from the stored key at launch rather than persisted as a bool, so flipping a
-    /// preference can't grant a licence.
+    /// Re-derived from the stored key and receipt at launch rather than persisted as a bool, so
+    /// flipping a preference can't grant a licence.
     var isLicensed: Bool { licenseID != nil }
 
-    /// What actually gates the app: a paid key, or a trial still inside its 3 days.
+    /// A key stored before activation existed, not yet bound to a Mac. Honoured while the service
+    /// can't be reached so an existing customer is never locked out by a network hiccup, and dropped
+    /// the moment the service says the key belongs to another Mac.
+    private(set) var awaitingActivation = false
+    /// Set when the stored key was refused because another Mac holds it; shown at the licence gate.
+    private(set) var refusedMessage: String?
+
+    /// What actually gates the app: a paid key, or a trial that hasn't run out yet.
     var isEntitled: Bool { isLicensed || TrialManager.shared.isActive }
 
     private let defaults = UserDefaults.standard
 
     private init() {
-        if let stored = defaults.string(forKey: Self.storageKey),
-           let payload = try? Self.verify(stored) {
+        guard let stored = defaults.string(forKey: Self.storageKey),
+              let payload = try? Self.verify(stored) else { return }
+        if Activation.receiptIsValid(defaults.string(forKey: Self.receiptKey), for: stored) {
             licenseID = payload.id
+        } else {
+            // Stored before activation existed, or a receipt for a different Mac (the preferences
+            // were copied). Counted for now; `completePendingActivation()` settles it.
+            licenseID = payload.id
+            awaitingActivation = true
         }
     }
 
-    /// Verifies and, on success, stores the key.
-    func activate(_ key: String) throws {
+    /// Verifies the key offline, then binds it to this Mac with the fulfilment service. Nothing is
+    /// stored unless the service agrees, so a key can't be activated on a second Mac by typing it in.
+    func activate(_ key: String) async throws {
         let payload = try Self.verify(key)
-        defaults.set(key, forKey: Self.storageKey)
-        licenseID = payload.id
+        switch await Activation.activate(key: key) {
+        case .activated(let receipt):
+            defaults.set(key, forKey: Self.storageKey)
+            defaults.set(receipt, forKey: Self.receiptKey)
+            licenseID = payload.id
+            awaitingActivation = false
+            refusedMessage = nil
+        case .alreadyActivatedElsewhere:
+            throw LicenseError.alreadyActivatedElsewhere
+        case .unreachable:
+            throw LicenseError.activationUnavailable
+        }
     }
 
+    /// Settles a key stored before activation existed. Called at launch; harmless to call again.
+    func completePendingActivation() async {
+        guard awaitingActivation, let stored = defaults.string(forKey: Self.storageKey) else { return }
+        switch await Activation.activate(key: stored) {
+        case .activated(let receipt):
+            defaults.set(receipt, forKey: Self.receiptKey)
+            awaitingActivation = false
+        case .alreadyActivatedElsewhere:
+            deactivate()
+            refusedMessage = LicenseError.alreadyActivatedElsewhere.errorDescription
+        case .unreachable:
+            break   // Keep working; try again next launch.
+        }
+    }
+
+    /// Removes the key from this Mac only. It does NOT free the key for another Mac - otherwise
+    /// activate, remove, hand it on would defeat the one-Mac rule. Moving a key is done from the
+    /// admin dashboard.
     func deactivate() {
         defaults.removeObject(forKey: Self.storageKey)
+        defaults.removeObject(forKey: Self.receiptKey)
         licenseID = nil
+        awaitingActivation = false
     }
 
     // MARK: - Verification

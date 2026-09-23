@@ -426,6 +426,15 @@ struct PasswordStepView: View {
 
     @State private var password = ""
 
+    /// Clears the field the moment the password is stored. Otherwise the plaintext stayed in this
+    /// view's state until the screen went away, for no reason once it's encrypted in the keychain.
+    private func submit() {
+        let entered = password
+        Task {
+            if await controller.finish(password: entered) { password = "" }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Enter your password")
@@ -433,7 +442,7 @@ struct PasswordStepView: View {
                 .foregroundStyle(MacIDTheme.textPrimary)
                 .padding(.leading, 4)
 
-            Text("Your password is required to unlock your Mac. It is encrypted and securely stored on your device. Mac ID works entirely offline, so your password never leaves your Mac.")
+            Text("Your password is required to unlock your Mac. It's encrypted, and the key that unlocks it is released only by Touch ID or your Mac password. It never leaves this Mac.")
                 .font(MacIDTheme.Font.passwordCaption)
                 .foregroundStyle(MacIDTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -443,7 +452,7 @@ struct PasswordStepView: View {
 
             PillSecureField(placeholder: "Enter password...", text: $password, autofocus: true) {
                 guard !password.isEmpty, !controller.isSavingPassword else { return }
-                Task { _ = await controller.finish(password: password) }
+                submit()
             }
 
             if let error = controller.passwordError {
@@ -463,7 +472,7 @@ struct PasswordStepView: View {
                     isEnabled: !password.isEmpty && !controller.isSavingPassword,
                     isDefault: true
                 ) {
-                    Task { _ = await controller.finish(password: password) }
+                    submit()
                 }
             }
         }

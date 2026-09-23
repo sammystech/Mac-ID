@@ -17,6 +17,7 @@ enum SecureCredentialError: LocalizedError {
     case encryptionFailed
     case decryptionFailed
     case sessionKeyUnavailable
+    case touchIDProtectionUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -28,6 +29,8 @@ enum SecureCredentialError: LocalizedError {
             return "Encryption failed."
         case .decryptionFailed:
             return "Decryption failed. The stored credential may be corrupted."
+        case .touchIDProtectionUnavailable:
+            return "This copy of Mac ID can't protect your password with Touch ID, so it won't store it. Download the latest version from nmx.net."
         case .sessionKeyUnavailable:
             return "The session key is missing, but encrypted data still exists that only it could read. Nothing has been deleted. Use Start Over on the Password tab to clear both and set up again."
         }
@@ -143,38 +146,24 @@ enum SecureCredentialManager {
 
         let key = SymmetricKey(size: .bits256)
 
-        // Preferred: gate the key behind Touch ID at the OS level, so even a process running as this
-        // user cannot read it without a live authentication.
-        //
-        // That uses the data-protection keychain, which requires the `keychain-access-groups`
-        // entitlement, which in turn requires an embedded provisioning profile. Builds signed for
-        // general distribution have neither (a Development profile only provisions registered Macs,
-        // which is what made earlier builds refuse to launch elsewhere), and the write fails with
-        // errSecMissingEntitlement.
-        //
-        // Rather than leave face unlock impossible to set up on anyone else's Mac, fall back to an
-        // ordinary device-local keychain item. Be clear about what that costs: this key decrypts the
-        // stored macOS login password, and without the access control any process running as this
-        // user can read it. `isSessionKeyBiometricallyProtected` reports which mode is in effect and
-        // is surfaced in Settings — this is not something to degrade silently.
-        //
-        // A Developer ID provisioning profile (ProvisionsAllDevices) removes the trade entirely and
-        // is the real fix.
+        // The key is always gated behind Touch ID by the keychain itself, so even a process running as
+        // this user can't read it without a live authentication. There is no fallback: an earlier one
+        // stored the key WITHOUT that gate when the keychain refused the Touch ID item (unsigned
+        // builds lacked the entitlement), which meant anything running as the user could decrypt the
+        // login password. Every release is now Developer ID signed with the entitlement, so that path
+        // only ever hid a broken build. If the gate is unavailable, refusing to store the password is
+        // the correct outcome.
+        let access = try KeychainManager.makeUserPresenceAccessControl()
         do {
-            let access = try KeychainManager.makeUserPresenceAccessControl()
             try KeychainManager.save(
                 account: sessionKeyAccount,
                 data: key.withUnsafeBytes { Data($0) },
                 accessControl: access
             )
-            setSessionKeyBiometricallyProtected(true)
         } catch KeychainError.osStatus(errSecMissingEntitlement) {
-            try KeychainManager.save(
-                account: sessionKeyAccount,
-                data: key.withUnsafeBytes { Data($0) }
-            )
-            setSessionKeyBiometricallyProtected(false)
+            throw SecureCredentialError.touchIDProtectionUnavailable
         }
+        setSessionKeyBiometricallyProtected(true)
 
         // Read back through the gated path rather than trusting the write — only a real read proves authentication happened.
         let readBackContext = LAContext()
@@ -188,7 +177,7 @@ enum SecureCredentialManager {
     /// Defaults to `true` so installs that predate the fallback — whose keys really were created
     /// with the access control — are not mislabelled. It is written explicitly whenever a key is
     /// minted, so the value always reflects the key that actually exists.
-    private static let biometricFlagKey = "MacID.sessionKeyBiometricallyProtected"
+    nonisolated private static let biometricFlagKey = "MacID.sessionKeyBiometricallyProtected"
 
     nonisolated static var isSessionKeyBiometricallyProtected: Bool {
         UserDefaults.standard.object(forKey: biometricFlagKey) as? Bool ?? true

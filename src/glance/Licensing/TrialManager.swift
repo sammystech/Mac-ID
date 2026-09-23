@@ -2,11 +2,11 @@
 //  TrialManager.swift
 //  Mac ID
 //
-//  A 3-day free trial, so someone can confirm face unlock actually works on their hardware before
+//  A 1-day free trial, so someone can confirm face unlock actually works on their hardware before
 //  paying for it.
 //
 //  The trial record lives in the keychain rather than `UserDefaults` for one reason: keychain items
-//  survive deleting the app, so uninstalling and reinstalling does not hand out a fresh 3 days.
+//  survive deleting the app, so uninstalling and reinstalling does not hand out a fresh trial.
 //  Preferences do not survive that, which would make the trial effectively unlimited.
 //
 //  This is deliberately honest about what it is: a speed bump, not DRM. Anyone determined can clear
@@ -24,7 +24,7 @@ final class TrialManager {
     static let shared = TrialManager()
 
     /// The trial length, in days.
-    static let trialDays = 3
+    static let trialDays = 1
 
     enum State: Equatable {
         case notStarted

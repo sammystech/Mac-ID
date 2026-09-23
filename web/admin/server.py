@@ -12,6 +12,7 @@ Storage is a plain JSON file next to this script. No database, no dependencies b
 library, and a format you can read, grep and back up without any tooling.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -104,6 +105,41 @@ def online_sales():
         return {"connected": False, "error": str(exc), "sales": []}
 
 
+def key_hash(key):
+    """Mirror of Activation.keyHash in the app (Licensing/Activation.swift). Must stay byte-identical,
+    or no key here will ever match its activation record."""
+    folded = []
+    for c in (key or "").upper().replace("MACID", ""):
+        if c in "- \n\r\t":
+            continue
+        folded.append({"I": "1", "L": "1", "O": "0", "U": "V"}.get(c, c))
+    return hashlib.sha256("".join(folded).encode()).hexdigest()
+
+
+def service_call(path, payload=None):
+    """GET (or POST with payload) against the fulfilment service with the admin token."""
+    import urllib.request
+    with open(SERVICE_CONFIG) as fh:
+        cfg = json.load(fh)
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(cfg["service_url"].rstrip("/") + path, data=data,
+                                 method="POST" if data else "GET",
+                                 headers={"Authorization": "Bearer " + cfg["admin_token"],
+                                          "User-Agent": "MacID-Admin/1.0",
+                                          "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.load(resp)
+
+
+def activations_by_key(keys):
+    """{key: activation record} for the given keys - the service only knows hashes."""
+    try:
+        records = service_call("/api/activations")
+    except Exception as exc:  # noqa: BLE001
+        return {"_error": str(exc)}
+    return {k: records[key_hash(k)] for k in keys if k and key_hash(k) in records}
+
+
 # ----------------------------------------------------------------- server
 
 class Handler(BaseHTTPRequestHandler):
@@ -129,6 +165,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(load()))
         if path == "/api/online-sales":
             return self._send(200, json.dumps(online_sales()))
+        if path == "/api/activations":
+            keys = [r.get("key") for r in load()] + [s.get("key") for s in online_sales().get("sales", [])]
+            return self._send(200, json.dumps(activations_by_key(keys)))
         if path == "/api/export.csv":
             rows = load()
             out = ["name,email,key,license_id,price,note,issued,revoked"]
@@ -194,6 +233,18 @@ class Handler(BaseHTTPRequestHandler):
             rows.append(row)
             save(rows)
             return self._send(200, json.dumps(row))
+
+        if path == "/api/release":
+            # Frees a key so it can be activated on a different Mac: the one support action a
+            # customer who replaced their Mac needs. Deliberately not self-service in the app.
+            key = (payload.get("key") or "").strip()
+            if not key:
+                return self._send(400, json.dumps({"error": "no key"}))
+            try:
+                result = service_call("/api/activation/release", {"key_hash": key_hash(key)})
+            except Exception as exc:  # noqa: BLE001
+                return self._send(502, json.dumps({"error": str(exc)}))
+            return self._send(200, json.dumps(result))
 
         if path == "/api/revoke":
             # A note only. Licences verify offline against the public key, so nothing can actually

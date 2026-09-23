@@ -16,6 +16,7 @@ struct AboutSettingsPage: View {
     /// resets the count, so this requires 5 *consecutive* taps.
     @State private var licenseInput = ""
     @State private var licenseError: String?
+    @State private var isActivating = false
     @State private var iconTapCount = 0
     @State private var lastTapDate: Date?
     private let requiredTapCount = 5
@@ -34,6 +35,26 @@ struct AboutSettingsPage: View {
         case .notStarted:
             return "Face unlock needs a licence key. Paste the one from your purchase email."
         }
+    }
+
+    static let supportEmail = "sammymittman@gmail.com"
+
+    /// Opens a pre-addressed email with the version details a support reply usually needs first.
+    /// Deliberately nothing personal: no licence key, name or face data — only what identifies the
+    /// build and the system it runs on.
+    static func emailSupport() {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = supportEmail
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "Mac ID support"),
+            URLQueryItem(name: "body", value: "\n\n\n—\nMac ID \(version) (\(build))\nmacOS \(os)"),
+        ]
+        if let url = components.url { NSWorkspace.shared.open(url) }
     }
 
     private var versionString: String {
@@ -90,8 +111,8 @@ struct AboutSettingsPage: View {
                                 .font(.system(size: 12, design: .monospaced))
                                 .padding(8)
                                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
-                            Button("Activate") { activate() }
-                                .disabled(licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            Button(isActivating ? "Activating…" : "Activate") { activate() }
+                                .disabled(isActivating || licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                         if let licenseError {
                             Text(licenseError)
@@ -134,6 +155,16 @@ struct AboutSettingsPage: View {
             // and permission notice to ship with every copy. `Acknowledgements.txt` in the bundle
             // is what satisfies that; this row only makes it reachable. Removing the file would
             // put the app out of compliance with the licence that permits it to exist.
+            SettingsRowContent(
+                title: "Support",
+                subtitle: Self.supportEmail,
+                subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+            ) {
+                SettingsPrimaryButton(title: "Email", compact: true) { Self.emailSupport() }
+            }
+
+            SettingsGroupDivider()
+
             SettingsActionRowContent(
                 title: "Acknowledgements",
                 buttonTitle: "Open"
@@ -146,12 +177,17 @@ struct AboutSettingsPage: View {
     }
 
     private func activate() {
-        do {
-            try license.activate(licenseInput)
-            licenseError = nil
-            licenseInput = ""
-        } catch {
-            licenseError = error.localizedDescription
+        guard !isActivating else { return }
+        isActivating = true
+        Task {
+            defer { isActivating = false }
+            do {
+                try await license.activate(licenseInput)
+                licenseError = nil
+                licenseInput = ""
+            } catch {
+                licenseError = error.localizedDescription
+            }
         }
     }
 

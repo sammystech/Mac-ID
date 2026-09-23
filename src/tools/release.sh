@@ -273,7 +273,14 @@ def mark(match):
              f"                <sparkle:belowVersion>{first}</sparkle:belowVersion>\n"
              "            </sparkle:informationalUpdate>\n        ")
     return item.replace("</item>", extra + "</item>")
-open(path, "w").write(re.sub(r"<item>.*?</item>", mark, feed, flags=re.S))
+feed = re.sub(r"<item>.*?</item>", mark, feed, flags=re.S)
+# Delta entries from the previous identity: never uploaded (see the staging loop), and never asked
+# for, since those copies only get the informational notice. Dropped so the feed doesn't point at
+# files that don't exist.
+def drop_old_delta(match):
+    return "" if int(match.group(1)) < first else match.group(0)
+feed = re.sub(r'\s*<enclosure url="[^"]*MacID\d+-(\d+)\.delta"[^>]*/>', drop_old_delta, feed)
+open(path, "w").write(feed)
 INFORMATIONAL
 grep -q "belowVersion>$FIRST_NEW_ID_BUILD<" "$UPLOAD_DIR/appcast.xml" \
     || die "Couldn't mark the release informational for the old identity - old copies would try an install that fails."
@@ -292,6 +299,13 @@ Upload the staged folder. Everything the newest feed entry points at is in it:
       "$UPLOAD_DIR"/*
 
 The website links to .../releases/latest/download/Mac-ID.dmg, so it follows automatically.
+
+Keep only the newest release on GitHub. Updates and the website's download link both go through
+releases/latest, so older releases aren't needed; their files stay in releases/ and dist/ here.
+Deleting is permanent, so run it yourself once this release is live:
+
+    gh release list --repo sammystech/Mac-ID --json tagName -q '.[].tagName' \\
+      | grep -vx "v$VERSION" | xargs -n1 -I{} gh release delete {} --repo sammystech/Mac-ID --yes
 
 The same notarized build is the one for this Mac too:
 

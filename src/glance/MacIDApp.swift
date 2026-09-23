@@ -151,6 +151,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // reason visible and gives the user somewhere to paste the key. Onboarding is not started until
         // a licence is in place, so an unlicensed copy never enrolls a face it could not use.
         TrialManager.shared.refresh()
+        // Keys stored before activation existed register with the service now. If this Mac turns
+        // out not to own the key, the licence is dropped and the gate says why.
+        Task { @MainActor [weak self] in
+            await LicenseManager.shared.completePendingActivation()
+            if !LicenseManager.shared.isEntitled {
+                LicenseGateWindow.present { self?.beginLicensedLaunch() }
+            }
+        }
         if LicenseManager.shared.isEntitled {
             beginLicensedLaunch()
         } else {

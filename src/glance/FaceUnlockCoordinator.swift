@@ -574,6 +574,10 @@ final class FaceUnlockCoordinator {
                 case .denied:
                     // Overrides everything, including a match and any confirmation that already happened.
                     lastOutcome = snapshot.decision.denialReason
+                    // Logged because this is the one refusal a real face can trigger — a deny cue firing
+                    // on the actual user. It used to be stored in `lastOutcome` and shown nowhere, so from
+                    // the lock screen it was indistinguishable from not being recognised.
+                    Self.timingLog.info("liveness DENIED: \(String(describing: snapshot.decision), privacy: .public) - \(snapshot.decision.denialReason ?? "", privacy: .public)")
                     return .spoofSuspected
                 case .confirmed(let cue):
                     livenessConfirmed = true
@@ -607,6 +611,7 @@ final class FaceUnlockCoordinator {
                 loggedScanDiagnostics = true
                 let stale = activeIdentities.filter { $0.isStale(comparedTo: pipeline.embedder) }
                 let best = scored.first.map { String(format: "%.3f", $0.centroidSimilarity) } ?? "none"
+                Self.timingLog.info("liveness: \(livenessEnabled ? "on" : "off", privacy: .public), mode \(AppSettings.shared.livenessMode.rawValue, privacy: .public), printed-photo \(AppSettings.shared.printedPhotoSensitivity.rawValue, privacy: .public)")
                 Self.timingLog.info(
                     """
                     scan: \(activeIdentities.count, privacy: .public) active identities, \
@@ -651,6 +656,11 @@ final class FaceUnlockCoordinator {
             }
 
             try? await Task.sleep(nanoseconds: Self.framePollInterval)
+        }
+        if livenessEnabled && !livenessConfirmed {
+            Self.timingLog.info("scan window ended: liveness never confirmed (\(processedFrames, privacy: .public) frames)")
+        } else {
+            Self.timingLog.info("scan window ended without a match (\(processedFrames, privacy: .public) frames)")
         }
         return .noResolution
     }

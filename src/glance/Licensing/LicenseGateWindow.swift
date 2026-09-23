@@ -94,7 +94,9 @@ private struct LicenseGateView: View {
     let onQuit: () -> Void
 
     @State private var key = ""
-    @State private var error: String?
+    // Starts with the reason a stored key was dropped, if it was, so the gate explains itself.
+    @State private var error: String? = LicenseManager.shared.refusedMessage
+    @State private var isActivating = false
     @State private var trial = TrialManager.shared
     @FocusState private var fieldFocused: Bool
 
@@ -178,15 +180,15 @@ private struct LicenseGateView: View {
             // not compete with the trial button for attention.
             Group {
                 if trialAvailable {
-                    Button(action: activate) { Text("Activate").frame(maxWidth: .infinity) }
+                    Button(action: activate) { Text(isActivating ? "Activating…" : "Activate").frame(maxWidth: .infinity) }
                         .buttonStyle(.bordered)
                 } else {
-                    Button(action: activate) { Text("Activate").frame(maxWidth: .infinity) }
+                    Button(action: activate) { Text(isActivating ? "Activating…" : "Activate").frame(maxWidth: .infinity) }
                         .buttonStyle(.borderedProminent)
                 }
             }
             .controlSize(.large)
-            .disabled(trimmedKey.isEmpty)
+            .disabled(trimmedKey.isEmpty || isActivating)
             .padding(.horizontal, 28)
             .padding(.top, 10)
 
@@ -217,7 +219,7 @@ private struct LicenseGateView: View {
     private var subtitle: String {
         switch trial.state {
         case .notStarted:
-            return "Try every feature free for \(TrialManager.trialDays) days. No payment, no account."
+            return "Try every feature free for \(TrialManager.trialDays == 1 ? "a day" : "\(TrialManager.trialDays) days"). No payment, no account."
         case .expired:
             return "Your free trial has ended. Enter a licence key to keep using Mac ID."
         case .active:
@@ -236,13 +238,17 @@ private struct LicenseGateView: View {
     }
 
     private func activate() {
-        guard !trimmedKey.isEmpty else { return }
-        do {
-            try LicenseManager.shared.activate(trimmedKey)
-            onActivated()
-        } catch {
-            // `LicenseError` already carries user-facing text for the two ways a key can be bad.
-            self.error = error.localizedDescription
+        guard !trimmedKey.isEmpty, !isActivating else { return }
+        isActivating = true
+        Task {
+            defer { isActivating = false }
+            do {
+                try await LicenseManager.shared.activate(trimmedKey)
+                onActivated()
+            } catch {
+                // `LicenseError` carries user-facing text for every way activation can fail.
+                self.error = error.localizedDescription
+            }
         }
     }
 }

@@ -38,11 +38,13 @@ CONFIG = os.path.join(HERE, "config.json")
 POOL = os.path.join(HERE, "pool.txt")
 POOL_INCOMING = os.path.join(HERE, "pool-incoming.txt")
 SALES = os.path.join(HERE, "sales.json")
+ACTIVATIONS = os.path.join(HERE, "activations.json")
 LOG = os.path.join(HERE, "fulfil.log")
 
 HOST, PORT = "127.0.0.1", 8790
 MAX_BODY = 256 * 1024
 CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
+HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
 LOCK = threading.Lock()
 
@@ -63,7 +65,7 @@ def log(message):
 def load_config():
     with open(CONFIG, encoding="utf-8") as fh:
         config = json.load(fh)
-    for required in ("webhook_secret", "admin_token"):
+    for required in ("webhook_secret", "admin_token", "receipt_secret"):
         if not config.get(required):
             raise SystemExit(f"config.json is missing {required!r}")
     return config
@@ -243,6 +245,50 @@ def handle_order_refunded(payload):
     return 200, {"ok": True}
 
 
+# ------------------------------------------------------------------ activation
+#
+# One Mac per licence. The app sends a SHA-256 of the licence key (never the key itself) and a SHA-256
+# fingerprint of the Mac's hardware UUID. The first Mac to ask gets the key; the same Mac asking again
+# (a reinstall) is fine; any other Mac is refused until the binding is released from the admin
+# dashboard. Storing only hashes means this file can't be mined for working keys, and a key can't be
+# claimed by someone who doesn't already have it.
+
+def receipt_for(config, key_hash, machine):
+    """What the app stores as proof of activation. Bound to both the key and the Mac, so copying a
+    receipt to another Mac doesn't carry the licence with it."""
+    message = f"macid-activation-v1|{key_hash}|{machine}".encode()
+    return hmac.new(config["receipt_secret"].encode(), message, hashlib.sha256).hexdigest()
+
+
+def handle_activate(config, payload):
+    key_hash = str(payload.get("key_hash") or "").lower()
+    machine = str(payload.get("machine") or "").lower()
+    if not HEX64_RE.match(key_hash) or not HEX64_RE.match(machine):
+        return 400, {"error": "bad request"}
+    with LOCK:
+        activations = read_json(ACTIVATIONS, {})
+        row = activations.get(key_hash)
+        if row and row.get("machine") != machine:
+            row["refused"] = row.get("refused", 0) + 1
+            row["last_refused"] = now()
+            write_json(ACTIVATIONS, activations)
+            log(f"activation REFUSED: key {key_hash[:10]} is bound to another Mac")
+            return 409, {"error": "already_activated"}
+        if not row:
+            row = {"machine": machine, "activated": now(), "refused": 0}
+            log(f"activation: key {key_hash[:10]} bound to Mac {machine[:10]}")
+        row["last_seen"] = now()
+        row["version"] = clean(payload.get("version"), 16)
+        row["os"] = clean(payload.get("os"), 24)
+        activations[key_hash] = row
+        write_json(ACTIVATIONS, activations)
+    return 200, {"ok": True, "receipt": receipt_for(config, key_hash, machine)}
+
+
+def clean(value, limit):
+    return re.sub(r"[^A-Za-z0-9._ -]", "", str(value or ""))[:limit]
+
+
 # ------------------------------------------------------------------ HTTP
 
 class Handler(BaseHTTPRequestHandler):
@@ -289,6 +335,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"status": "delayed"})
             return self._send(200, {"status": "pending"})
 
+        if path == "/api/activations":
+            if not self._admin_ok():
+                return self._send(403, {"error": "forbidden"})
+            with LOCK:
+                return self._send(200, read_json(ACTIVATIONS, {}))
+
         if path == "/api/sales":
             if not self._admin_ok():
                 return self._send(403, {"error": "forbidden"})
@@ -300,7 +352,30 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        if urlparse(self.path).path.rstrip("/") != "/api/ls/webhook":
+        path = urlparse(self.path).path.rstrip("/")
+        if path in ("/api/activate", "/api/activation/release"):
+            length = int(self.headers.get("Content-Length") or 0)
+            if length <= 0 or length > 4096:
+                return self._send(413, {"error": "bad length"})
+            try:
+                payload = json.loads(self.rfile.read(length))
+            except (json.JSONDecodeError, ValueError):
+                return self._send(400, {"error": "bad JSON"})
+            if path == "/api/activate":
+                return self._send(*handle_activate(self.config, payload))
+            # Releasing a binding lets a key move to another Mac - admin only, or "only works once"
+            # would mean nothing.
+            if not self._admin_ok():
+                return self._send(403, {"error": "forbidden"})
+            key_hash = str(payload.get("key_hash") or "").lower()
+            with LOCK:
+                activations = read_json(ACTIVATIONS, {})
+                released = activations.pop(key_hash, None)
+                write_json(ACTIVATIONS, activations)
+            log(f"activation released for key {key_hash[:10]}" if released else f"release: no binding for {key_hash[:10]}")
+            return self._send(200, {"ok": True, "released": bool(released)})
+
+        if path != "/api/ls/webhook":
             return self._send(404, {"error": "not found"})
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAX_BODY:
