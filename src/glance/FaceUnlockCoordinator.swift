@@ -106,6 +106,8 @@ final class FaceUnlockCoordinator {
                 // and the arm animation — roughly 550ms of waiting before the hardware was even
                 // asked to start. Everything the recognizer then does costs ~25ms a frame against
                 // that.
+                self.recoverSessionIfNeeded()
+                self.recoverAccessibilityIfNeeded()
                 self.prewarmCamera()
                 // Brief settle delay: CGSession's reported state can lag the true state right after wake.
                 try? await Task.sleep(nanoseconds: 300_000_000)
@@ -113,6 +115,77 @@ final class FaceUnlockCoordinator {
             }
         }
     }
+
+    /// Re-prompts for Touch ID after a manual unlock, when the session key is locked.
+    ///
+    /// The session key lives only in RAM, so it is locked by every app launch — including the
+    /// relaunch macOS forces when one of the app's permissions is toggled. There is no way to
+    /// prompt at the lock screen (no UI can host a Touch ID sheet there), so a prompt dismissed at
+    /// launch used to leave face unlock silently dead: `evaluateTrigger` would set a status message
+    /// nobody sees and return without ever showing the notch. The only symptom was the lock screen
+    /// doing nothing at all.
+    ///
+    /// A manual unlock is the one moment the user is provably at the machine and has just
+    /// authenticated, which makes it the right time to ask again.
+    private func recoverSessionIfNeeded() {
+        guard lockMonitor.lastEvent == .screenUnlocked else { return }
+        guard isEnabled,
+              LicenseManager.shared.isEntitled,
+              SecureCredentialManager.hasStoredPassword(),
+              !SecureCredentialManager.isSessionUnlocked
+        else { return }
+
+        // Someone who cancels means it, so back off rather than re-asking on every unlock. Cleared
+        // on a successful unlock, so a later genuine relock still recovers.
+        let now = ContinuousClock.now
+        if let last = lastSessionPromptAt, now - last < Self.sessionPromptCooldown { return }
+        lastSessionPromptAt = now
+
+        Task { [weak self] in
+            // Let the unlock animation finish first; a Touch ID sheet racing it gets dismissed.
+            try? await Task.sleep(for: .milliseconds(900))
+            guard let self, !SecureCredentialManager.isSessionUnlocked else { return }
+            await self.pocController.unlockSession()
+            if SecureCredentialManager.isSessionUnlocked {
+                self.lastSessionPromptAt = nil
+            }
+        }
+    }
+
+    /// One diagnostic line per scan rather than per frame.
+    private var loggedScanDiagnostics = false
+
+    /// Points the user at the Accessibility switch right after they log in by hand, when face
+    /// unlock is set up but can't type.
+    ///
+    /// Without the grant a scan still recognises the face — the logs show sub-second matches — and
+    /// then `injectStoredPassword` refuses, so the user types their password themselves with no idea
+    /// why. That manual login is the moment they are at the machine and have just seen it fail, so
+    /// it is when the fix is most likely to be understood rather than dismissed.
+    private func recoverAccessibilityIfNeeded() {
+        guard lockMonitor.lastEvent == .screenUnlocked else { return }
+        pocController.refreshAccessibilityStatus()
+        guard isEnabled,
+              SecureCredentialManager.hasStoredPassword(),
+              !pocController.accessibilityGranted
+        else { return }
+
+        let now = ContinuousClock.now
+        if let last = lastAccessibilityPromptAt, now - last < Self.sessionPromptCooldown { return }
+        lastAccessibilityPromptAt = now
+
+        statusMessage = "Face unlock recognised you but couldn't type — Accessibility is off."
+        Task { [weak self] in
+            // Behind the Touch ID sheet `recoverSessionIfNeeded` may be raising, not on top of it.
+            try? await Task.sleep(for: .milliseconds(2500))
+            guard let self, !self.pocController.accessibilityGranted else { return }
+            self.pocController.openAccessibilitySettings()
+        }
+    }
+
+    private var lastAccessibilityPromptAt: ContinuousClock.Instant?
+    private var lastSessionPromptAt: ContinuousClock.Instant?
+    private static let sessionPromptCooldown = Duration.seconds(300)
 
     /// Speculative: starts the capture session on the cheap, stable preconditions, before the
     /// settle delay has confirmed we will actually scan. `evaluateTrigger` calls `abandonPrewarm()`
@@ -334,6 +407,13 @@ final class FaceUnlockCoordinator {
             if showsUI {
                 NotchOverlayController.shared.finish(success: true)
             }
+        case .injectionFailed:
+            // pocController already holds the specific reason; surfacing it beats a generic failure.
+            statusMessage = pocController.statusMessage
+            if showsUI {
+                NotchOverlayController.shared.finish(success: false)
+            }
+
         case .consistentlyWrongFace:
             statusMessage = "Face not recognized."
             if showsUI {
@@ -387,6 +467,9 @@ final class FaceUnlockCoordinator {
 
     private enum ScanOutcome {
         case matched
+        /// Face was recognised but the password never reached the login window — almost always a
+        /// missing Accessibility grant. Distinct from a failed match so the UI can say so.
+        case injectionFailed
         case consistentlyWrongFace
         /// A deny cue (glare, device rectangle) fired — actively rejected as a spoof regardless of match. Same failure path as `.consistentlyWrongFace`.
         case spoofSuspected
@@ -431,6 +514,8 @@ final class FaceUnlockCoordinator {
         var processedFrames = 0
         var firstFrameAt: ContinuousClock.Instant?
 
+        // Once per scan, not per frame — reset here, before the loop.
+        loggedScanDiagnostics = false
         while Date() < deadline, !Task.isCancelled,
               !requireOverlayScanning || NotchOverlayController.shared.phase == .scanning {
             guard LockMonitor.isScreenActuallyLocked() else { return .noResolution }
@@ -510,8 +595,33 @@ final class FaceUnlockCoordinator {
             let fusedEmbedding = FaceEmbedding.average(recentEmbeddings) ?? result.embedding
 
             // `activeIdentities`, not `identities`: someone switched off on the Your Face page stays enrolled but must not unlock.
-            let scored = pipeline.score(fusedEmbedding, against: FaceEnrollmentStore.shared.activeIdentities)
+            let activeIdentities = FaceEnrollmentStore.shared.activeIdentities
+            let scored = pipeline.score(fusedEmbedding, against: activeIdentities)
             let matched = pipeline.bestMatch(in: scored, threshold: matchThreshold)
+
+            // Only successes used to be logged, which made every refusal indistinguishable: a
+            // stale enrolment (recorded under a different model, so `bestMatch` returns nil no
+            // matter whose face it is) looked exactly like a genuine non-match. Logged once per
+            // scan so a real refusal can be read back instead of guessed at.
+            if !loggedScanDiagnostics {
+                loggedScanDiagnostics = true
+                let stale = activeIdentities.filter { $0.isStale(comparedTo: pipeline.embedder) }
+                let best = scored.first.map { String(format: "%.3f", $0.centroidSimilarity) } ?? "none"
+                Self.timingLog.info(
+                    """
+                    scan: \(activeIdentities.count, privacy: .public) active identities, \
+                    \(stale.count, privacy: .public) stale (enrolled under a different model), \
+                    best \(best, privacy: .public) vs threshold \
+                    \(String(format: "%.2f", self.matchThreshold), privacy: .public)
+                    """)
+                if let first = activeIdentities.first {
+                    Self.timingLog.info(
+                        """
+                        enrolment model \(first.modelIdentifier, privacy: .public), \
+                        embedder model \(self.pipeline.embedder.modelIdentifier, privacy: .public)
+                        """)
+                }
+            }
 
             if let matched {
                 consecutiveWrongFaceFrames = 0
@@ -520,6 +630,8 @@ final class FaceUnlockCoordinator {
                 readyMatch = nil
                 consecutiveWrongFaceFrames += 1
                 if consecutiveWrongFaceFrames >= wrongFaceStreakThreshold {
+                    let best = scored.first.map { String(format: "%.3f", $0.centroidSimilarity) } ?? "none"
+                    Self.timingLog.info("refused: best \(best, privacy: .public) < \(String(format: "%.2f", self.matchThreshold), privacy: .public) over \(self.wrongFaceStreakThreshold, privacy: .public) frames")
                     return .consistentlyWrongFace
                 }
             }
@@ -532,7 +644,9 @@ final class FaceUnlockCoordinator {
                     ? (confirmingCue.map { "live via \($0.title)" } ?? "liveness clear")
                     : "liveness off"
                 lastOutcome = "Matched \(readyMatch.identity.name) at \(String(format: "%.3f", readyMatch.centroidSimilarity)), \(livenessNote)."
-                await pocController.injectStoredPassword(requireAuthoritativeLock: true)
+                guard await pocController.injectStoredPassword(requireAuthoritativeLock: true) else {
+                    return .injectionFailed
+                }
                 return .matched
             }
 

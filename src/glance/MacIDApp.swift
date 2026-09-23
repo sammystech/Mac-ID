@@ -55,6 +55,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     /// Held so `menuNeedsUpdate` can refresh this row in place rather than rebuilding the whole menu.
     private var sessionMenuItem: NSMenuItem?
+    /// Shown only while Accessibility is missing. Without it face unlock recognises you and then
+    /// can't type, so this has to be visible from the menu bar, not buried in Settings.
+    private var accessibilityMenuItem: NSMenuItem?
+    /// The normal menu bar glyph, kept so the warning badge can be removed again.
+    private var baseMenuBarIcon: NSImage?
+    private var accessibilitySeparator: NSMenuItem?
     /// Bridges SwiftUI's `openWindow(\.settings)` action in from `MacIDApp.body`, since this plain `NSObject` has no
     /// `@Environment` of its own. Bound from the scene body (not `onAppear`) so it's ready before Settings has ever shown —
     /// `NSApp.windows` stops containing the window once fully closed, so only `openWindow(id:)` can reliably re-create it.
@@ -87,10 +93,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             icon?.size = NSSize(width: menuBarHeight * iconSize.width / iconSize.height, height: menuBarHeight)
         }
         item.button?.image = icon
+        baseMenuBarIcon = icon
 
         let menu = NSMenu()
         // Refreshes `sessionMenuItem` right before the menu displays — see `menuNeedsUpdate` below.
         menu.delegate = self
+
+        let accessibilityItem = NSMenuItem(
+            title: "Accessibility is off — Turn On…",
+            action: #selector(openAccessibilitySettings),
+            keyEquivalent: ""
+        )
+        accessibilityItem.target = self
+        accessibilityItem.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)
+        accessibilityItem.toolTip = "Mac ID can recognise your face but can't type your password until Accessibility is on."
+        menu.addItem(accessibilityItem)
+        accessibilityMenuItem = accessibilityItem
+        let separator = NSMenuItem.separator()
+        menu.addItem(separator)
+        accessibilitySeparator = separator
 
         let sessionItem = NSMenuItem(title: "", action: #selector(toggleSession), keyEquivalent: "")
         sessionItem.target = self
@@ -110,6 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
 
         updateSessionMenuItem()
+        updateAccessibilityIndicators()
+        observeAccessibility()
 
         // SwiftUI can flip the app back to `.regular` while installing scenes even with `.suppressed`; re-assert accessory.
         NSApp.setActivationPolicy(.accessory)
@@ -144,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if AppSettings.shared.hasAcknowledgedSecurityNotice {
                 startUpdaterIfNeeded()
                 unlockSessionForFaceUnlockIfNeeded()
+                requestAccessibilityIfNeeded()
             } else {
                 // Upgraded from a version before the notice existed — show it once, standalone.
                 presentPostUpdateSecurityNotice()
@@ -212,6 +236,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Asks macOS for Accessibility at launch when face unlock is set up but can't type.
+    ///
+    /// Without Accessibility the whole pipeline still runs — the face is recognised, often in
+    /// under a second — and then the keystroke is refused, which from the lock screen looks
+    /// exactly like being rejected. Onboarding asks for it once, but the grant can be lost later
+    /// (`tccutil reset`, or a re-signed build whose designated requirement changed), and at that
+    /// point nothing asked again: the app dropped out of the System Settings list entirely, so
+    /// there wasn't even a toggle to find. `AXIsProcessTrustedWithOptions` with the prompt option
+    /// puts the app back in that list and shows the system's own dialog pointing at it.
+    private func requestAccessibilityIfNeeded() {
+        guard AppSettings.shared.isFaceUnlockEnabled,
+              SecureCredentialManager.hasStoredPassword(),
+              !KeystrokeInjector.isAccessibilityTrusted()
+        else { return }
+        Task { @MainActor [environment] in
+            // After the Touch ID sheet from `unlockSessionForFaceUnlockIfNeeded`, so two system
+            // dialogs don't land on top of each other.
+            try? await Task.sleep(for: .milliseconds(2500))
+            guard !KeystrokeInjector.isAccessibilityTrusted() else { return }
+            environment.pocController.openAccessibilitySettings()
+        }
+    }
+
     /// Reachable from launch (onboarding already done) or from first-run completion — `hasStartedUpdater` collapses both into "exactly once."
     private func startUpdaterIfNeeded() {
         guard !hasStartedUpdater else { return }
@@ -231,7 +278,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Fires right before the menu opens — simpler than keeping an `NSMenuItem` reactively bound to `isSessionUnlocked`.
     func menuNeedsUpdate(_ menu: NSMenu) {
+        environment.pocController.refreshAccessibilityStatus()
         updateSessionMenuItem()
+        updateAccessibilityIndicators()
+    }
+
+    /// Hides or shows the warning row, and tints the menu bar icon so a missing grant is visible
+    /// without opening the menu at all.
+    private func updateAccessibilityIndicators() {
+        let granted = environment.pocController.accessibilityGranted
+        accessibilityMenuItem?.isHidden = granted
+        accessibilitySeparator?.isHidden = granted
+        // Not `contentTintColor`: the macOS 27 menu bar ignores it for status items and instead
+        // drops template rendering, so the glyph came out solid black — which reads as a glitch,
+        // not a warning. A badge drawn into the image itself renders the same everywhere.
+        if let base = baseMenuBarIcon {
+            statusItem?.button?.image = granted ? base : Self.badged(base)
+        }
+        statusItem?.button?.toolTip = granted ? "Mac ID" : "Mac ID — Accessibility is off, face unlock can't type your password"
+    }
+
+    /// The menu bar glyph with an orange dot in its lower-right corner.
+    ///
+    /// Drawn lazily through a drawing handler so `labelColor` resolves against whatever appearance
+    /// the menu bar is using when it draws — white on a dark bar, black on a light one — which is
+    /// what a template image would have done. The ring cleared around the dot keeps it legible
+    /// against the glyph and any wallpaper.
+    private static func badged(_ base: NSImage) -> NSImage {
+        let size = base.size
+        let image = NSImage(size: size, flipped: false) { rect in
+            base.draw(in: rect)
+            NSColor.labelColor.set()
+            rect.fill(using: .sourceAtop)
+
+            let diameter = min(size.width, size.height) * 0.46
+            let dot = NSRect(x: rect.maxX - diameter, y: rect.minY, width: diameter, height: diameter)
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: dot.insetBy(dx: -1.5, dy: -1.5)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.systemOrange.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// Re-registers on every change — `withObservationTracking` fires once per registration.
+    private func observeAccessibility() {
+        withObservationTracking {
+            _ = environment.pocController.accessibilityGranted
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.updateAccessibilityIndicators()
+                self?.observeAccessibility()
+            }
+        }
+    }
+
+    @objc private func openAccessibilitySettings() {
+        environment.pocController.openAccessibilitySettings()
     }
 
     private func updateSessionMenuItem() {

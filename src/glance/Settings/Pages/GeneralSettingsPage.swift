@@ -8,6 +8,7 @@ import SwiftUI
 
 struct GeneralSettingsPage: View {
     @Bindable var coordinator: FaceUnlockCoordinator
+    @Bindable var pocController: POCController
     @Bindable private var settings = AppSettings.shared
 
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
@@ -30,6 +31,29 @@ struct GeneralSettingsPage: View {
     }
 
     var body: some View {
+        // First thing on the first page, because without it nothing else here matters: faces are
+        // recognised and then the password is never typed. Tracks the live grant, so it disappears
+        // the moment the switch is turned on.
+        if !pocController.accessibilityGranted {
+            VStack(alignment: .leading, spacing: 8) {
+                SettingsGroup {
+                    SettingsRowContent(
+                        title: "Accessibility is off",
+                        subtitle: "Mac ID can recognise you but can't type your password.",
+                        subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+                    ) {
+                        SettingsPrimaryButton(title: "Turn On", compact: true) {
+                            pocController.openAccessibilitySettings()
+                        }
+                    }
+                }
+                SettingsCaption(text: "In System Settings, switch on Mac ID under Privacy & Security → Accessibility. "
+                    + "If Mac ID isn't in the list, pressing Turn On adds it.")
+            }
+            .padding(.bottom, 12)
+            .onAppear { pocController.refreshAccessibilityStatus() }
+        }
+
         SettingsGroup {
             SettingsRowContent(title: "Launch at login") {
                 MacIDToggle(isOn: Binding(
