@@ -37,7 +37,7 @@ struct AboutSettingsPage: View {
         }
     }
 
-    static let supportEmail = "sammymittman@gmail.com"
+    static let supportEmail = "support@macid.net"
 
     /// Opens a pre-addressed email with the version details a support reply usually needs first.
     /// Deliberately nothing personal: no licence key, name or face data — only what identifies the

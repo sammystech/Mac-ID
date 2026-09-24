@@ -225,6 +225,7 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
 .claim-steps{counter-reset:step}
 .claim-ok{width:40px; height:40px; margin:0 auto; border-radius:50%; background:rgba(52,199,89,.16);
   display:flex; align-items:center; justify-content:center; color:#5BE08A; font-size:22px; font-weight:700}
+.claim-help{margin-top:14px; font-size:.82rem; color:var(--text-faint)}
 </style>
 </head>
 <body>
@@ -383,6 +384,7 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
   <span>© 2026 Mac ID</span>
   <a href="https://github.com/sammystech/Mac-ID">GitHub</a>
   <a href="https://github.com/sammystech/Mac-ID/releases">Releases</a>
+  <a href="mailto:support@macid.net">support@macid.net</a>
   <span class="sp">Built on open-source work — see Acknowledgements in the app.</span>
 </div></div></footer>
 
@@ -461,13 +463,14 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
      'Save it somewhere safe. It never expires, and works on any Mac you own.']
       .forEach(function (t) { steps.appendChild(el('li', null, t)); });
     nodes.push(steps);
+    nodes.push(el('p', 'claim-help', 'Questions? support@macid.net'));
     show(nodes);
     body.querySelector('h3').id = 'claim-title';
   }
 
   function showDelayed() {
     show([el('div', 'claim-ok', '✓'), el('h3', null, 'Your order is in'),
-          el('p', null, 'Your payment went through, but your key needs a little longer to prepare. It’ll be emailed to the address you used at checkout.')]);
+          el('p', null, 'Your payment went through, but your key needs a little longer to prepare. Email support@macid.net with your receipt and it’ll be sent to you.')]);
     body.querySelector('h3').id = 'claim-title';
   }
 
