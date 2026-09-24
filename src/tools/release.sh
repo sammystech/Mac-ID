@@ -200,16 +200,25 @@ mkdir -p "$DIST_DIR"
 # and a space-free name also keeps the download URL clean.
 DMG="$DIST_DIR/Mac-ID-$VERSION.dmg"
 rm -f "$DMG"
-DMG_ROOT=$(mktemp -d)
-cp -R "$APP" "$DMG_ROOT/"
-ln -s /Applications "$DMG_ROOT/Applications"
-hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_ROOT" -ov -format UDZO -fs HFS+ "$DMG" >/dev/null 2>&1
-rm -rf "$DMG_ROOT"
-# Deliberately NOT signed. Measured with a quarantined copy: an unsigned DMG is simply not judged
-# ("no usable signature") and mounts, while a Developer-ID-signed DMG that isn't itself notarized is
-# rejected outright ("Unnotarized Developer ID"). Signing it would only help if it were notarized
-# too, which needs notarytool credentials this setup doesn't have. The app inside carries its own
-# stapled ticket, and that is what Gatekeeper checks when it's first opened.
+# The installer window: a background telling people to drag Mac ID into Applications, with the app
+# and an Applications link either side of the arrow. dmgbuild writes the window layout straight into
+# the image's .DS_Store, so no Finder scripting (and no Automation permission prompt) is involved.
+# Deliberately NOT signed: an unsigned DMG is simply not judged and mounts, while a Developer-ID-signed
+# DMG that isn't itself notarized is rejected outright ("Unnotarized Developer ID"). The app inside
+# carries its own stapled ticket, which is what Gatekeeper checks when it's first opened.
+DMG_TOOLS="$PWD/tools/dmg"
+DMG_VENV="$PWD/tools/.dmg-venv"
+if [[ ! -x "$DMG_VENV/bin/dmgbuild" ]]; then
+    python3 -m venv "$DMG_VENV" && "$DMG_VENV/bin/pip" install -q dmgbuild pillow \
+        || die "Couldn't install dmgbuild for the installer window."
+fi
+"$DMG_VENV/bin/python" "$DMG_TOOLS/make_background.py" "$BUILD_DIR" >/dev/null \
+    && tiffutil -cathidpicheck "$BUILD_DIR/background.png" "$BUILD_DIR/background@2x.png" \
+        -out "$BUILD_DIR/background.tiff" >/dev/null 2>&1 \
+    || die "Couldn't draw the installer background."
+"$DMG_VENV/bin/dmgbuild" -s "$DMG_TOOLS/dmg_settings.py" -D app="$APP" \
+    -D background="$BUILD_DIR/background.tiff" "$APP_NAME" "$DMG" >/dev/null 2>&1 \
+    || die "dmgbuild failed to make the installer DMG."
 echo "  $(du -h "$DMG" | cut -f1)  $DMG"
 
 # ---------------------------------------------------------------- appcast

@@ -29,3 +29,6 @@ web/admin/pool-sent.csv
 web/service/config.json
 web/service/pool*.txt
 web/service/sales.json
+
+# Local tool environment for building the installer DMG.
+src/tools/.dmg-venv/
