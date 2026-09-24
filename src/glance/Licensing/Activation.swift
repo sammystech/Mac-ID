@@ -10,7 +10,7 @@
 //  dashboard. That's what stops one purchase being passed around.
 //
 //  What leaves this Mac, and only at activation: a SHA-256 of the licence key and a SHA-256 of the
-//  hardware UUID, plus the app and macOS versions. Never the key itself, the UUID itself, a name, an
+//  hardware UUID, plus the app and macOS versions and the Terms of Use version agreed to. Never the key itself, the UUID itself, a name, an
 //  email, face data, or anything about the stored password.
 //
 //  The service answers with a receipt: an HMAC over the key hash and the Mac fingerprint. It's stored
@@ -83,6 +83,8 @@ nonisolated enum Activation {
             "machine": machineFingerprint,
             "version": version,
             "os": ProcessInfo.processInfo.operatingSystemVersionString,
+            // The Terms of Use version agreed to on this Mac, so the dashboard can show it per licence.
+            "terms": Terms.acceptedVersion ?? "",
         ]
         var request = URLRequest(url: endpoint, timeoutInterval: 15)
         request.httpMethod = "POST"

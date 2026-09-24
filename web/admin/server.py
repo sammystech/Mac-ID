@@ -168,6 +168,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/activations":
             keys = [r.get("key") for r in load()] + [s.get("key") for s in online_sales().get("sales", [])]
             return self._send(200, json.dumps(activations_by_key(keys)))
+        if path == "/api/terms":
+            # Every Mac that has agreed to the Terms of Use in the app, trial users included, keyed
+            # by the same hashed fingerprint as activations.
+            try:
+                return self._send(200, json.dumps(service_call("/api/terms")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(200, json.dumps({"_error": str(exc)}))
         if path == "/api/export.csv":
             rows = load()
             out = ["name,email,key,license_id,price,note,issued,revoked"]

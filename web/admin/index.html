@@ -72,6 +72,7 @@ tr.revoked{opacity:.42}
   border:1px solid rgba(70,227,155,.3)}
 .result .key{color:#CFFBE4;max-width:none;font-size:11.5px;margin:9px 0 11px}
 .msg{margin-top:13px;font-size:13px;padding:10px 13px;border-radius:11px;display:none}
+.msg.err:empty{display:none}
 .msg.err{display:block;background:rgba(255,107,122,.12);border:1px solid rgba(255,107,122,.32);color:#FFB3BC}
 .empty{padding:44px 20px;text-align:center;color:var(--faint);font-size:14px}
 .store-status{margin:-4px 2px 12px; font-size:12.5px; color:var(--faint)}
@@ -84,6 +85,8 @@ tr.revoked{opacity:.42}
 .act.on{color:#5BE08A}
 .act.none{color:var(--faint)}
 .act.warn{color:#FFB35C;font-weight:600}
+.terms-panel{margin-top:20px}
+.terms-panel p{font-size:12.5px;color:var(--faint);margin:-8px 0 14px}
 </style>
 </head>
 <body>
@@ -138,6 +141,8 @@ tr.revoked{opacity:.42}
         <div class="stat glass"><b id="s-paid">0</b><span>Paid</span></div>
         <div class="stat glass"><b id="s-free">0</b><span>Free</span></div>
         <div class="stat glass"><b id="s-pool">–</b><span>Keys in store pool</span></div>
+        <div class="stat glass"><b id="s-active">–</b><span>Activated</span></div>
+        <div class="stat glass"><b id="s-terms">–</b><span>Agreed to terms</span></div>
       </div>
       <div id="store-status" class="store-status"></div>
       <div class="panel glass">
@@ -147,13 +152,19 @@ tr.revoked{opacity:.42}
         </div>
         <div id="tablewrap"><div class="empty">No licences issued yet.</div></div>
       </div>
+      <div class="panel glass terms-panel">
+        <h2>Terms of Use agreements</h2>
+        <p>Every Mac that ticked "I agree" in the app, including free-trial users. Macs are shown by a
+          hashed fingerprint only; one that has activated a licence shows whose it is.</p>
+        <div id="termswrap"><div class="empty">Loading…</div></div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
 let rows = [];
-let local = [], online = [], activations = {};
+let local = [], online = [], activations = {}, terms = {};
 
 // Online orders arrive from the fulfilment service on the PC. They are shown alongside keys issued
 // here, but they are not written into licenses.json - the PC's sales.json is their record.
@@ -167,6 +178,7 @@ function fromSale(s) {
     key: s.key || '', price: (s.total || '').replace(/[^0-9.]/g, '') || '4.99',
     note: bits.join(' · '), issued: s.created, revoked: s.refunded || '',
     test: !!s.test_mode, needsKey: !s.key,
+    checkoutTerms: s.terms || '', checkoutTermsAt: s.terms_accepted || '',
   };
 }
 
@@ -186,6 +198,7 @@ async function refresh() {
     online = (store.sales || []).map(fromSale);
     rows = local.concat(online);
     try { activations = await (await fetch('/api/activations')).json(); } catch (e) { activations = {}; }
+    try { terms = await (await fetch('/api/terms')).json(); } catch (e) { terms = { _error: String(e) }; }
     document.getElementById('s-pool').textContent = store.pool_remaining;
     const waiting = online.filter(r => r.needsKey).length;
     status.className = 'store-status' + (waiting || store.pool_remaining < 20 ? ' warn' : '');
@@ -204,6 +217,9 @@ function render() {
   document.getElementById('s-total').textContent = rows.filter(r => !r.revoked).length;
   document.getElementById('s-paid').textContent  = rows.filter(r => !r.revoked && !r.test && r.price !== '0').length;
   document.getElementById('s-free').textContent  = rows.filter(r => !r.revoked && r.price === '0').length;
+  document.getElementById('s-active').textContent = rows.filter(r => activations[r.key]).length;
+  document.getElementById('s-terms').textContent = terms._error ? '–' : Object.keys(terms).length;
+  renderTerms();
 
   const wrap = document.getElementById('tablewrap');
   if (!shown.length) {
@@ -222,7 +238,7 @@ function render() {
           ${r.source === 'store' ? '<span class="tag store">online</span>' : ''}
           ${r.test ? '<span class="tag test">test</span>' : ''}
           ${r.needsKey ? '<span class="tag needs">needs key</span>' : ''}
-          ${activationLine(r.key)}</td>
+          ${activationLine(r.key)}${termsLine(r)}</td>
         <td style="color:var(--faint);font-size:12.5px">${(r.issued || '').replace('T', ' ').replace('+00:00', '')}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm" onclick="copyKey('${r.ref}')">Copy</button>
@@ -238,6 +254,50 @@ function activationLine(key) {
   const since = (a.activated || '').slice(0, 10);
   const refused = a.refused ? ` · <b class="act warn">refused on another Mac ${a.refused}×</b>` : '';
   return `<span class="act on">activated on Mac ${esc((a.machine || '').slice(0, 8))} since ${since}</span>${refused}`;
+}
+
+const day = s => (s || '').slice(0, 10);
+
+// Two separate agreements: the checkbox on the website at checkout (online orders only), and the
+// "I agree" screen in the app, which every copy shows before it will run.
+function termsLine(r) {
+  const bits = [];
+  if (r.source === 'store') {
+    bits.push(r.checkoutTerms
+      ? `<span class="act on" title="Terms version ${esc(r.checkoutTerms)}">agreed to terms at checkout ${day(r.checkoutTermsAt)}</span>`
+      : '<span class="act none">no terms at checkout</span>');
+  }
+  const a = activations[r.key];
+  const t = a && terms[a.machine];
+  if (t) {
+    const version = t.latest || a.terms;
+    bits.push(`<span class="act on" title="Terms version ${esc(version)}">agreed to terms in app ${day((t.accepted || {})[version])}</span>`);
+  } else if (a && a.terms) {
+    bits.push(`<span class="act on" title="Terms version ${esc(a.terms)}">agreed to terms in app</span>`);
+  } else if (a) {
+    bits.push('<span class="act none">terms not reported (app before 1.12)</span>');
+  }
+  return bits.join('');
+}
+
+function renderTerms() {
+  const wrap = document.getElementById('termswrap');
+  if (terms._error) { wrap.innerHTML = `<div class="empty">Couldn't reach the service: ${esc(terms._error)}</div>`; return; }
+  const owners = {};
+  for (const r of rows) { const a = activations[r.key]; if (a) owners[a.machine] = r; }
+  const macs = Object.entries(terms).sort((x, y) => (y[1].last_seen || '').localeCompare(x[1].last_seen || ''));
+  if (!macs.length) { wrap.innerHTML = '<div class="empty">No Mac has agreed yet. Mac ID 1.12 and later report it.</div>'; return; }
+  wrap.innerHTML = '<table><thead><tr><th>Mac</th><th>Agreed</th><th>App</th><th>Licence</th></tr></thead><tbody>' +
+    macs.map(([machine, t]) => {
+      const owner = owners[machine];
+      const agreed = Object.entries(t.accepted || {}).map(([v, at]) => `${day(at)} <span style="color:var(--faint)">· terms version ${esc(v)}</span>`).join('<br>');
+      return `<tr>
+        <td class="key" style="white-space:nowrap">${esc(machine.slice(0, 8))}</td>
+        <td>${agreed}</td>
+        <td style="color:var(--faint);font-size:12.5px">Mac ID ${esc(t.app_version)} · ${esc(t.os)}<br>last seen ${day(t.last_seen)}</td>
+        <td class="who">${owner ? `<b>${esc(owner.name)}</b><span>${esc(owner.email)}</span>` : '<span>trial or not activated</span>'}</td>
+      </tr>`;
+    }).join('') + '</tbody></table>';
 }
 
 async function release(ref) {

@@ -57,6 +57,12 @@ struct AboutSettingsPage: View {
         if let url = components.url { NSWorkspace.shared.open(url) }
     }
 
+    private var termsSubtitle: String {
+        guard let version = Terms.acceptedVersion else { return "Not yet agreed" }
+        guard let date = Terms.acceptedDate else { return "Agreed to version \(version)" }
+        return "Agreed to version \(version) on \(date.formatted(date: .abbreviated, time: .omitted))"
+    }
+
     private var versionString: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -151,10 +157,6 @@ struct AboutSettingsPage: View {
 
             SettingsGroupDivider()
 
-            // Mac ID is a derivative of MIT-licensed work, and MIT requires the copyright notice
-            // and permission notice to ship with every copy. `Acknowledgements.txt` in the bundle
-            // is what satisfies that; this row only makes it reachable. Removing the file would
-            // put the app out of compliance with the licence that permits it to exist.
             SettingsRowContent(
                 title: "Support",
                 subtitle: Self.supportEmail,
@@ -165,6 +167,20 @@ struct AboutSettingsPage: View {
 
             SettingsGroupDivider()
 
+            SettingsRowContent(
+                title: "Terms of Use",
+                subtitle: termsSubtitle,
+                subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+            ) {
+                SettingsPrimaryButton(title: "View", compact: true) { NSWorkspace.shared.open(Terms.webURL) }
+            }
+
+            SettingsGroupDivider()
+
+            // Mac ID is a derivative of MIT-licensed work, and MIT requires the copyright notice
+            // and permission notice to ship with every copy. `Acknowledgements.txt` in the bundle
+            // is what satisfies that; this row only makes it reachable. Removing the file would
+            // put the app out of compliance with the licence that permits it to exist.
             SettingsActionRowContent(
                 title: "Acknowledgements",
                 buttonTitle: "Open"

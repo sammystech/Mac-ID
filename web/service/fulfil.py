@@ -39,12 +39,14 @@ POOL = os.path.join(HERE, "pool.txt")
 POOL_INCOMING = os.path.join(HERE, "pool-incoming.txt")
 SALES = os.path.join(HERE, "sales.json")
 ACTIVATIONS = os.path.join(HERE, "activations.json")
+TERMS = os.path.join(HERE, "terms.json")
 LOG = os.path.join(HERE, "fulfil.log")
 
 HOST, PORT = "127.0.0.1", 8790
 MAX_BODY = 256 * 1024
 CLAIM_RE = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+TERMS_VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 LOCK = threading.Lock()
 
@@ -200,6 +202,10 @@ def handle_order_created(config, payload):
 
     custom = (payload.get("meta") or {}).get("custom_data") or {}
     claim = str(custom.get("claim") or "")
+    # The version of the Terms of Use the buyer ticked before checkout. Checked by format only: the
+    # website won't open checkout without it, so an order missing it didn't come through that page.
+    terms = str(custom.get("terms") or "")
+    terms = terms if TERMS_VERSION_RE.match(terms) else ""
     if claim and not CLAIM_RE.match(claim):
         claim = ""
 
@@ -221,6 +227,8 @@ def handle_order_created(config, payload):
             "test_mode": bool(attrs.get("test_mode")),
             "created": now(),
             "claim": claim,
+            "terms": terms,
+            "terms_accepted": now() if terms else "",
             "key": key,
             "status": "issued" if key else "awaiting key",
             "refunded": "",
@@ -287,9 +295,34 @@ def handle_activate(config, payload):
         row["last_seen"] = now()
         row["version"] = clean(payload.get("version"), 16)
         row["os"] = clean(payload.get("os"), 24)
+        terms = str(payload.get("terms") or "")
+        if TERMS_VERSION_RE.match(terms):
+            row["terms"] = terms
         activations[key_hash] = row
         write_json(ACTIVATIONS, activations)
     return 200, {"ok": True, "receipt": receipt_for(config, key_hash, machine)}
+
+
+def handle_terms_accept(payload):
+    """A copy of Mac ID recording that its user agreed to a version of the Terms of Use. Keyed by the
+    same hashed Mac fingerprint as activation, so a purchase, an activation and an agreement on the
+    same Mac line up in the admin dashboard - without ever storing anything identifying."""
+    machine = str(payload.get("machine") or "").lower()
+    version = str(payload.get("version") or "")
+    if not HEX64_RE.match(machine) or not TERMS_VERSION_RE.match(version):
+        return 400, {"error": "bad request"}
+    with LOCK:
+        records = read_json(TERMS, {})
+        row = records.get(machine) or {"accepted": {}}
+        row["accepted"].setdefault(version, now())
+        row["latest"] = version
+        row["app_version"] = clean(payload.get("app_version"), 16)
+        row["os"] = clean(payload.get("os"), 24)
+        row["last_seen"] = now()
+        records[machine] = row
+        write_json(TERMS, records)
+    log(f"terms {version} accepted on Mac {machine[:10]}")
+    return 200, {"ok": True}
 
 
 def clean(value, limit):
@@ -342,6 +375,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"status": "delayed"})
             return self._send(200, {"status": "pending"})
 
+        if path == "/api/terms":
+            if not self._admin_ok():
+                return self._send(403, {"error": "forbidden"})
+            with LOCK:
+                return self._send(200, read_json(TERMS, {}))
+
         if path == "/api/activations":
             if not self._admin_ok():
                 return self._send(403, {"error": "forbidden"})
@@ -360,7 +399,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path.rstrip("/")
-        if path in ("/api/activate", "/api/activation/release"):
+        if path in ("/api/activate", "/api/activation/release", "/api/terms/accept"):
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0 or length > 4096:
                 return self._send(413, {"error": "bad length"})
@@ -370,6 +409,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "bad JSON"})
             if path == "/api/activate":
                 return self._send(*handle_activate(self.config, payload))
+            if path == "/api/terms/accept":
+                return self._send(*handle_terms_accept(payload))
             # Releasing a binding lets a key move to another Mac - admin only, or "only works once"
             # would mean nothing.
             if not self._admin_ok():

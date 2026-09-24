@@ -150,7 +150,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // (see FaceUnlockCoordinator), but silently doing nothing reads as a broken app; this makes the
         // reason visible and gives the user somewhere to paste the key. Onboarding is not started until
         // a licence is in place, so an unlicensed copy never enrolls a face it could not use.
+        //
+        // Ahead of even that: the Terms of Use. Nothing runs, and no licence or trial can be taken
+        // up, until the current version has been agreed to on this Mac.
         TrialManager.shared.refresh()
+        if Terms.isAccepted {
+            beginAfterTerms()
+        } else {
+            TermsGateWindow.present { [weak self] in self?.beginAfterTerms() }
+        }
+    }
+
+    private func beginAfterTerms() {
+        // Retries a report that couldn't reach the service when the terms were agreed to.
+        Task { await Terms.reportIfNeeded() }
         // Keys stored before activation existed register with the service now. If this Mac turns
         // out not to own the key, the licence is dropped and the gate says why.
         Task { @MainActor [weak self] in
