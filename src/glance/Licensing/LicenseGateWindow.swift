@@ -195,7 +195,7 @@ private struct LicenseGateView: View {
             Spacer(minLength: 14)
 
             HStack(spacing: 10) {
-                Link("Get a licence", destination: URL(string: "https://nmx.net")!)
+                Link("Get a licence", destination: URL(string: "https://macid.net")!)
                     .font(.system(size: 11))
                 Text("·")
                     .foregroundStyle(SettingsMetrics.textTertiary)

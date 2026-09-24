@@ -268,7 +268,7 @@ def mark(match):
     build = re.search(r"<sparkle:version>(\d+)</sparkle:version>", item)
     if not build or int(build.group(1)) < first or "informationalUpdate" in item:
         return item
-    extra = ("    <link>https://nmx.net</link>\n"
+    extra = ("    <link>https://macid.net</link>\n"
              "            <sparkle:informationalUpdate>\n"
              f"                <sparkle:belowVersion>{first}</sparkle:belowVersion>\n"
              "            </sparkle:informationalUpdate>\n        ")

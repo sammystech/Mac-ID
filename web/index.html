@@ -540,7 +540,7 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
     document.head.appendChild(s);
   }
 
-  // Coming back to the page (a reload mid-checkout, or the receipt's link to nmx.net/#key):
+  // Coming back to the page (a reload mid-checkout, or the receipt's link to macid.net/#key):
   // pick up where this browser left off instead of losing the key.
   var saved = load();
   var fresh = saved && saved.created && Date.now() - saved.created < POLL_FOR_MS;

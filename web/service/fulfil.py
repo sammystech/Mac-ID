@@ -146,7 +146,7 @@ def send_key_email(config, sale):
         f"Thanks for buying Mac ID. Your licence key:\n\n"
         f"    {sale['key']}\n\n"
         f"Paste it into Mac ID when it asks, or in Settings > About. It never expires.\n\n"
-        f"Download: https://nmx.net\n"
+        f"Download: https://macid.net\n"
     )
     body = json.dumps({
         "from": sender, "to": [sale["email"]],

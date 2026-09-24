@@ -23,7 +23,9 @@ import Foundation
 import IOKit
 
 nonisolated enum Activation {
-    static let endpoint = URL(string: "https://nmx.net/api/activate")!
+    /// macid.net, the product's own domain. nmx.net keeps answering the same path for copies that
+    /// shipped before the move, so older versions keep activating.
+    static let endpoint = URL(string: "https://macid.net/api/activate")!
 
     enum Outcome {
         case activated(receipt: String)
