@@ -82,6 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        if let preview = UserDefaults.standard.string(forKey: "MacIDPreviewGate") {
+            LicenseGateWindow.previewState = preview == "expired" ? .expired : .notStarted
+            LicenseGateWindow.present {}
+            return
+        }
+        #endif
         LegacyMigration.finishLaunch()
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -164,6 +171,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func beginAfterTerms() {
         // Retries a report that couldn't reach the service when the terms were agreed to.
         Task { await Terms.reportIfNeeded() }
+        // A running trial adopts the service's start for this Mac, which catches a trial "renewed" by
+        // clearing the keychain. If that ends it, the licence gate comes up now.
+        if !LicenseManager.shared.isLicensed {
+            Task { @MainActor [weak self] in
+                await TrialManager.shared.syncIfNeeded()
+                if TrialManager.shared.endsAt != nil { self?.enforceEntitlement() }
+            }
+        }
         // Keys stored before activation existed register with the service now. If this Mac turns
         // out not to own the key, the licence is dropped and the gate says why.
         Task { @MainActor [weak self] in
@@ -184,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Everything that used to run unconditionally at the end of `applicationDidFinishLaunching`, now
     /// also reachable from the licence gate's completion.
     private func beginLicensedLaunch() {
+        watchTrialExpiry()
         // Deferred until onboarding is done — Sparkle's own "Check for updates automatically?" consent alert fires the moment
         // it starts on a fresh install, and starting unconditionally here used to pop it mid-onboarding.
         if AppSettings.shared.hasCompletedOnboarding {
@@ -198,6 +214,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             presentOnboardingGate()
         }
+    }
+
+    // MARK: - Trial expiry
+
+    private var trialExpiryTimer: Timer?
+    private var isWatchingTrialExpiry = false
+
+    /// Mac ID can run for days without relaunching, so the end of a trial has to be noticed while it
+    /// runs: a timer for the moment it ends, plus a re-check on wake and on unlock, because a timer
+    /// doesn't advance while the Mac sleeps. Face unlock itself also refuses per scan (see
+    /// `FaceUnlockCoordinator.isEntitledNow`); this is what tells the user why and asks for a key.
+    private func watchTrialExpiry() {
+        guard !isWatchingTrialExpiry else { return }
+        isWatchingTrialExpiry = true
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(enforceEntitlement),
+            name: NSWorkspace.didWakeNotification, object: nil
+        )
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(enforceEntitlement),
+            name: Notification.Name("com.apple.screenIsUnlocked"), object: nil
+        )
+        scheduleTrialExpiryCheck()
+    }
+
+    private func scheduleTrialExpiryCheck() {
+        trialExpiryTimer?.invalidate()
+        trialExpiryTimer = nil
+        guard !LicenseManager.shared.isLicensed, let end = TrialManager.shared.endsAt, end > Date() else { return }
+        let timer = Timer(fireAt: end.addingTimeInterval(1), interval: 0, target: self,
+                          selector: #selector(enforceEntitlement), userInfo: nil, repeats: false)
+        RunLoop.main.add(timer, forMode: .common)
+        trialExpiryTimer = timer
+    }
+
+    /// Once the trial is over and there's no licence, the gate stays up until a key is entered or
+    /// the app is quit. It has no close button, so there's no way to dismiss it and carry on.
+    @objc private func enforceEntitlement() {
+        guard !LicenseManager.shared.isLicensed else {
+            trialExpiryTimer?.invalidate()
+            trialExpiryTimer = nil
+            return
+        }
+        if FaceUnlockCoordinator.isEntitledNow() {
+            scheduleTrialExpiryCheck()
+            return
+        }
+        LicenseGateWindow.present { [weak self] in self?.scheduleTrialExpiryCheck() }
     }
 
     /// First-run gate: onboarding lives entirely in the notch, so this stays accessory. Called once at launch if onboarding

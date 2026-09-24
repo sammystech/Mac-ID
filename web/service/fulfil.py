@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import threading
+import time
 import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -40,6 +41,7 @@ POOL_INCOMING = os.path.join(HERE, "pool-incoming.txt")
 SALES = os.path.join(HERE, "sales.json")
 ACTIVATIONS = os.path.join(HERE, "activations.json")
 TERMS = os.path.join(HERE, "terms.json")
+TRIALS = os.path.join(HERE, "trials.json")
 LOG = os.path.join(HERE, "fulfil.log")
 
 HOST, PORT = "127.0.0.1", 8790
@@ -65,7 +67,8 @@ def log(message):
 
 
 def load_config():
-    with open(CONFIG, encoding="utf-8") as fh:
+    # utf-8-sig: Windows PowerShell writes a byte-order mark, which plain utf-8 json.load rejects.
+    with open(CONFIG, encoding="utf-8-sig") as fh:
         config = json.load(fh)
     for required in ("webhook_secret", "admin_token", "receipt_secret"):
         if not config.get(required):
@@ -136,33 +139,101 @@ def pool_size():
 
 # ------------------------------------------------------------------ email (optional)
 
-def send_key_email(config, sale):
-    """Backup delivery. The page shows the key directly; this covers a closed tab."""
-    api_key = config.get("resend_api_key")
-    sender = config.get("email_from")
-    if not api_key or not sender or not sale.get("email") or not sale.get("key"):
+def email_configured(config):
+    return bool(config.get("resend_api_key") and config.get("email_from"))
+
+
+def send_email(config, to, subject, text):
+    """Sends through Resend. Returns a short result string for the log; never raises."""
+    if not email_configured(config):
         return "not configured"
-    first = (sale.get("name") or "").split(" ")[0] or "there"
-    text = (
-        f"Hi {first},\n\n"
-        f"Thanks for buying Mac ID. Your licence key:\n\n"
-        f"    {sale['key']}\n\n"
-        f"Paste it into Mac ID when it asks, or in Settings > About. It never expires.\n\n"
-        f"Download: https://macid.net\n"
-    )
-    body = json.dumps({
-        "from": sender, "to": [sale["email"]],
-        "subject": "Your Mac ID licence key", "text": text,
-    }).encode()
+    body = json.dumps({"from": config["email_from"], "to": [to], "subject": subject, "text": text,
+                       "reply_to": "support@macid.net"}).encode()
     request = urllib.request.Request(
         "https://api.resend.com/emails", data=body, method="POST",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {config['resend_api_key']}", "Content-Type": "application/json",
+                 "User-Agent": "MacID-Fulfilment/1.0"},
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             return f"sent ({response.status})"
     except Exception as exc:  # noqa: BLE001 - any failure is recorded, never fatal
         return f"failed: {exc}"
+
+
+def send_key_email(config, sale):
+    """Backup delivery. The page shows the key directly; this covers a closed tab."""
+    if not email_configured(config) or not sale.get("email") or not sale.get("key"):
+        return "not configured"
+    first = (sale.get("name") or "").split(" ")[0] or "there"
+    text = (
+        f"Hi {first},\n\n"
+        f"Thanks for buying Mac ID. Your licence key:\n\n"
+        f"    {sale['key']}\n\n"
+        f"Paste it into Mac ID when it asks, or in Settings > About. It never expires, and it "
+        f"activates on one Mac; to move it to a new Mac, just reply to this email.\n\n"
+        f"Keep this email. If you ever lose your key, search your inbox for \"Mac ID licence key\" "
+        f"and it'll be right here.\n\n"
+        f"Download: https://macid.net\n"
+    )
+    return send_email(config, sale["email"], "Your Mac ID licence key", text)
+
+
+# ------------------------------------------------------------------ lost key recovery
+
+EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
+RECOVER_WINDOW = 3600
+RECOVER_PER_EMAIL = 3
+RECOVER_PER_IP = 10
+_recover_hits = {}
+
+
+def _rate_limited(bucket, limit):
+    stamp = time.time()
+    hits = [t for t in _recover_hits.get(bucket, []) if stamp - t < RECOVER_WINDOW]
+    _recover_hits[bucket] = hits
+    if len(hits) >= limit:
+        return True
+    hits.append(stamp)
+    return False
+
+
+def handle_recover(config, payload, client_ip):
+    """"Lost your key?" on the website. Email is the login: the key is only ever sent to the
+    address the order was placed with, so knowing someone's email gets you nothing but sending them
+    their own key. The answer is the same whether or not the address bought anything, so the form
+    can't be used to find out who's a customer."""
+    email = str(payload.get("email") or "").strip().lower()
+    if not EMAIL_RE.match(email) or len(email) > 254:
+        return 400, {"error": "bad email"}
+    if not email_configured(config):
+        return 503, {"error": "email not configured"}
+    with LOCK:
+        if _rate_limited("ip:" + client_ip, RECOVER_PER_IP) or _rate_limited("email:" + email, RECOVER_PER_EMAIL):
+            return 429, {"error": "too many requests"}
+        sales = [s for s in read_json(SALES, {}).values()
+                 if (s.get("email") or "").strip().lower() == email and s.get("key") and not s.get("refunded")]
+    if sales:
+        keys = "\n".join(f"    {s['key']}" for s in sales)
+        first = (sales[-1].get("name") or "").split(" ")[0] or "there"
+        text = (
+            f"Hi {first},\n\n"
+            f"Here {'is your' if len(sales) == 1 else 'are your'} Mac ID licence key{'' if len(sales) == 1 else 's'}:\n\n"
+            f"{keys}\n\n"
+            f"Paste it into Mac ID when it asks, or in Settings > About.\n\n"
+            f"A key activates on one Mac. If you've moved to a new Mac, reply to this email and we'll move "
+            f"it for you.\n\n"
+            f"If you didn't ask for this, you can ignore it - the key was only sent to you.\n\n"
+            f"Download: https://macid.net\n"
+        )
+
+        def run():
+            result = send_email(config, sales[-1]["email"], "Your Mac ID licence key", text)
+            log(f"recovery for {email.split('@')[0][:3]}***: {len(sales)} key(s), email {result}")
+        threading.Thread(target=run, daemon=True).start()
+    else:
+        log("recovery: no order for that email")
+    return 200, {"ok": True}
 
 
 def email_in_background(config, order_id):
@@ -325,6 +396,37 @@ def handle_terms_accept(payload):
     return 200, {"ok": True}
 
 
+def handle_trial(payload):
+    """One free trial per Mac. The app calls this when a trial starts and at launch while one is
+    running; the answer is the earliest start this Mac has ever reported, and the app adopts it.
+    That is what stops a trial being renewed by deleting its keychain record, reinstalling, or
+    making a new macOS user account - all of which the local record alone can't see."""
+    machine = str(payload.get("machine") or "").lower()
+    if not HEX64_RE.match(machine):
+        return 400, {"error": "bad request"}
+    current = time.time()
+    try:
+        claimed = float(payload.get("started") or current)
+    except (TypeError, ValueError):
+        claimed = current
+    # A start in the future would lengthen the trial; only ever accept one that shortens it.
+    claimed = min(claimed, current)
+    with LOCK:
+        records = read_json(TRIALS, {})
+        row = records.get(machine)
+        if not row:
+            row = {"started_ts": claimed, "first_seen": now()}
+            log(f"trial started on Mac {machine[:10]}")
+        row["started_ts"] = min(float(row.get("started_ts") or claimed), claimed)
+        row["started"] = datetime.fromtimestamp(row["started_ts"], timezone.utc).isoformat(timespec="seconds")
+        row["last_seen"] = now()
+        row["app_version"] = clean(payload.get("app_version"), 16)
+        row["os"] = clean(payload.get("os"), 24)
+        records[machine] = row
+        write_json(TRIALS, records)
+    return 200, {"ok": True, "started": row["started_ts"]}
+
+
 def clean(value, limit):
     return re.sub(r"[^A-Za-z0-9._ -]", "", str(value or ""))[:limit]
 
@@ -370,6 +472,8 @@ class Handler(BaseHTTPRequestHandler):
                     "keys": [s["key"] for s in ready],
                     "name": ready[-1].get("name", ""),
                     "email": ready[-1].get("email", ""),
+                    # Lets the page say "we've emailed it to you too" only when that's true.
+                    "emailed": email_configured(self.config),
                 })
             if matches:
                 return self._send(200, {"status": "delayed"})
@@ -380,6 +484,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "forbidden"})
             with LOCK:
                 return self._send(200, read_json(TERMS, {}))
+
+        if path == "/api/trials":
+            if not self._admin_ok():
+                return self._send(403, {"error": "forbidden"})
+            with LOCK:
+                return self._send(200, read_json(TRIALS, {}))
 
         if path == "/api/activations":
             if not self._admin_ok():
@@ -399,7 +509,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path.rstrip("/")
-        if path in ("/api/activate", "/api/activation/release", "/api/terms/accept"):
+        if path in ("/api/activate", "/api/activation/release", "/api/terms/accept", "/api/trial", "/api/recover"):
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0 or length > 4096:
                 return self._send(413, {"error": "bad length"})
@@ -411,6 +521,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*handle_activate(self.config, payload))
             if path == "/api/terms/accept":
                 return self._send(*handle_terms_accept(payload))
+            if path == "/api/trial":
+                return self._send(*handle_trial(payload))
+            if path == "/api/recover":
+                client_ip = (self.headers.get("CF-Connecting-IP")
+                             or (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+                             or self.client_address[0])
+                return self._send(*handle_recover(self.config, payload, client_ip))
             # Releasing a binding lets a key move to another Mac - admin only, or "only works once"
             # would mean nothing.
             if not self._admin_ok():

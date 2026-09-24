@@ -46,11 +46,20 @@ final class LicenseGateWindow {
         gate.show()
     }
 
+    #if DEBUG
+    /// Layout check only: `-MacIDPreviewGate expired` (or `trial`) on a Debug build shows the gate in
+    /// that state and nothing else runs. Never compiled into a release.
+    static var previewState: TrialManager.State?
+    #endif
+
     private func show() {
-        let view = LicenseGateView(
+        var view = LicenseGateView(
             onActivated: { [weak self] in self?.finish() },
             onQuit: { NSApp.terminate(nil) }
         )
+        #if DEBUG
+        view.previewState = Self.previewState
+        #endif
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
@@ -68,7 +77,9 @@ final class LicenseGateWindow {
         // Without a licence there is nothing behind this window to return to, so closing it is
         // equivalent to quitting. Making that explicit avoids leaving a running, invisible,
         // unlicensed app with no Dock icon and no way to bring anything back.
-        window.standardWindowButton(.closeButton)?.isHidden = true
+        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(button)?.isHidden = true
+        }
 
         self.window = window
 
@@ -89,14 +100,25 @@ final class LicenseGateWindow {
     }
 }
 
+/// Straight to the price card with the terms box focused, and to the lost-key form. Both are handled
+/// by the page's script (see web/index.html, `handleHash`).
+enum LicenseLinks {
+    static let buy = URL(string: "https://macid.net/#licence")!
+    static let recover = URL(string: "https://macid.net/#recover")!
+}
+
 private struct LicenseGateView: View {
     let onActivated: () -> Void
     let onQuit: () -> Void
+    var previewState: TrialManager.State?
+
+    private var trialState: TrialManager.State { previewState ?? trial.state }
 
     @State private var key = ""
     // Starts with the reason a stored key was dropped, if it was, so the gate explains itself.
     @State private var error: String? = LicenseManager.shared.refusedMessage
     @State private var isActivating = false
+    @State private var isStartingTrial = false
     @State private var trial = TrialManager.shared
     @FocusState private var fieldFocused: Bool
 
@@ -105,7 +127,7 @@ private struct LicenseGateView: View {
     }
 
     private var trialAvailable: Bool {
-        trial.state == .notStarted
+        trialState == .notStarted
     }
 
     var body: some View {
@@ -128,11 +150,36 @@ private struct LicenseGateView: View {
                 .padding(.horizontal, 32)
                 .padding(.top, 4)
 
-            if trialAvailable {
-                Button(action: startTrial) {
-                    Text("Start \(TrialManager.trialDays)-day free trial")
+            if !trialAvailable {
+                // Once the trial is over, buying is the way forward, so it leads.
+                // A Button rather than a Link: a Link ignores the prominent button style.
+                Button { NSWorkspace.shared.open(LicenseLinks.buy) } label: {
+                    Text("Buy a licence — $4.99")
                         .frame(maxWidth: .infinity)
                 }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal, 28)
+                .padding(.top, 20)
+
+                HStack(spacing: 8) {
+                    Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                    Text("then paste your key")
+                        .font(.system(size: 10))
+                        .foregroundStyle(SettingsMetrics.textTertiary)
+                        .fixedSize()
+                    Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 16)
+            }
+
+            if trialAvailable {
+                Button(action: startTrial) {
+                    Text(isStartingTrial ? "Starting trial…" : "Start \(TrialManager.trialDays)-day free trial")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(isStartingTrial)
                 .controlSize(.large)
                 .buttonStyle(.borderedProminent)
                 .padding(.horizontal, 28)
@@ -174,19 +221,11 @@ private struct LicenseGateView: View {
                 }
             }
             .padding(.horizontal, 28)
-            .padding(.top, trialAvailable ? 12 : 20)
+            .padding(.top, 12)
 
-            // Prominent only when a key is the sole way in; while the trial is on offer it should
-            // not compete with the trial button for attention.
-            Group {
-                if trialAvailable {
-                    Button(action: activate) { Text(isActivating ? "Activating…" : "Activate").frame(maxWidth: .infinity) }
-                        .buttonStyle(.bordered)
-                } else {
-                    Button(action: activate) { Text(isActivating ? "Activating…" : "Activate").frame(maxWidth: .infinity) }
-                        .buttonStyle(.borderedProminent)
-                }
-            }
+            // Never the prominent button: the trial, or buying, is what the eye should land on first.
+            Button(action: activate) { Text(isActivating ? "Activating…" : "Activate").frame(maxWidth: .infinity) }
+            .buttonStyle(.bordered)
             .controlSize(.large)
             .disabled(trimmedKey.isEmpty || isActivating)
             .padding(.horizontal, 28)
@@ -195,7 +234,13 @@ private struct LicenseGateView: View {
             Spacer(minLength: 14)
 
             HStack(spacing: 10) {
-                Link("Get a licence", destination: URL(string: "https://macid.net")!)
+                if trialAvailable {
+                    Link("Buy a licence", destination: LicenseLinks.buy)
+                        .font(.system(size: 11))
+                    Text("·")
+                        .foregroundStyle(SettingsMetrics.textTertiary)
+                }
+                Link("Lost your key?", destination: LicenseLinks.recover)
                     .font(.system(size: 11))
                 Text("·")
                     .foregroundStyle(SettingsMetrics.textTertiary)
@@ -206,22 +251,22 @@ private struct LicenseGateView: View {
             }
             .padding(.bottom, 18)
         }
-        .frame(width: 400, height: trialAvailable ? 470 : 400)
+        .frame(width: 400, height: 420)
         .background(.ultraThickMaterial)
         .onAppear {
             trial.refresh()
-            // Focus the field only when it is the sole way forward; otherwise the trial button
-            // should be what the eye lands on.
-            fieldFocused = !trialAvailable
+            // Never auto-focused: the trial or the buy button should be what the eye lands on, and a
+            // focused field would swallow Return meant for them.
+            fieldFocused = false
         }
     }
 
     private var subtitle: String {
-        switch trial.state {
+        switch trialState {
         case .notStarted:
             return "Try every feature free for \(TrialManager.trialDays == 1 ? "a day" : "\(TrialManager.trialDays) days"). No payment, no account."
         case .expired:
-            return "Your free trial has ended. Enter a licence key to keep using Mac ID."
+            return "Your free trial has ended. Mac ID won't unlock your Mac until you add a licence key."
         case .active:
             // Not normally reachable — an active trial launches straight into the app.
             return "Enter your licence key to activate."
@@ -229,11 +274,18 @@ private struct LicenseGateView: View {
     }
 
     private func startTrial() {
-        trial.start()
-        if trial.isActive {
-            onActivated()
-        } else {
-            error = "Couldn't start the trial. Enter a licence key instead."
+        guard !isStartingTrial else { return }
+        isStartingTrial = true
+        Task {
+            defer { isStartingTrial = false }
+            switch await trial.start() {
+            case .started:
+                onActivated()
+            case .alreadyUsed:
+                error = "This Mac has already used its free trial. Enter a licence key to keep using Mac ID."
+            case .unreachable:
+                error = "Couldn't reach macid.net to start the trial. Check your internet connection and try again."
+            }
         }
     }
 

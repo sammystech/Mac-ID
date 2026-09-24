@@ -316,6 +316,15 @@ section[id]{scroll-margin-top:var(--nav-h)}
 .terms-msg{margin:-6px 0 16px 29px;font-size:.875rem;color:var(--warn)}
 .terms-msg:empty{display:none}
 .price-note{margin-top:14px;font-size:.8125rem;line-height:1.5;color:var(--fg-3)}
+.price-note + .price-note{margin-top:6px}
+.claim-form{margin-top:18px;display:flex;flex-direction:column;gap:12px;text-align:left}
+.claim-form label{font-size:.875rem;color:var(--fg-2)}
+.claim-input{width:100%;padding:12px 14px;border-radius:var(--r-m);background:var(--bg);border:1px solid var(--line-3);
+  color:var(--fg);font:inherit;font-size:1rem}
+.claim-input:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.claim-form .btn{width:100%}
+.claim-status{min-height:1.2em;font-size:.9rem;color:var(--fg-2)}
+.claim-status.warn{color:var(--warn)}
 @media (max-width:1023px){.price-copy,.price-card{grid-column:1/-1}.price-card{max-width:520px}}
 
 /* =====================================================================  download */
@@ -363,6 +372,8 @@ section[id]{scroll-margin-top:var(--nav-h)}
 .claim-ok{width:42px;height:42px;margin:0 auto;border-radius:50%;background:rgba(48,209,88,.14);
   display:flex;align-items:center;justify-content:center;color:var(--ok);font-size:22px;font-weight:700}
 .claim-help{margin-top:14px;font-size:.82rem;color:var(--fg-3)}
+.claim-mail{margin-top:14px;padding:12px 14px;border-radius:var(--r-m);background:rgba(142,114,255,.1);
+  border:1px solid rgba(142,114,255,.25);font-size:.88rem;line-height:1.5;color:var(--fg-2);text-align:left}
 </style>
 </head>
 <body id="top">
@@ -655,6 +666,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
         <p id="terms-msg" class="terms-msg" aria-live="polite"></p>
         <a class="btn btn-primary" href="#" id="buy">Buy a licence</a>
         <p class="price-note">Checkout is handled securely by Lemon Squeezy. Your key appears on this page the moment you’ve paid.</p>
+        <p class="price-note">Lost your key? <a class="link" href="#recover" id="recover-link">Get it emailed to you</a>.</p>
       </div>
     </div>
   </div>
@@ -1146,7 +1158,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
     body.querySelector('h3').id = 'claim-title';
   }
 
-  function showKey(keys, name) {
+  function showKey(keys, name, email, emailed) {
     var first = (name || '').split(' ')[0];
     var nodes = [el('div', 'claim-ok', '✓'), el('h3', null, first ? 'Thanks, ' + first + '!' : 'Thank you!'),
                  el('p', null, keys.length > 1 ? 'Your licence keys:' : 'Your licence key:')];
@@ -1161,9 +1173,16 @@ section[id]{scroll-margin-top:var(--nav-h)}
     nodes.push(copy);
     var steps = el('ol', 'claim-steps');
     ['Download and open Mac ID.', 'When it asks, paste this key and press Activate.',
-     'Save it somewhere safe. It never expires. It activates on one Mac; to move it to a new one, email support@macid.net.']
+     emailed
+       ? 'It never expires. It activates on one Mac; to move it to a new one, email support@macid.net.'
+       : 'Save it somewhere safe. It never expires. It activates on one Mac; to move it to a new one, email support@macid.net.']
       .forEach(function (t) { steps.appendChild(el('li', null, t)); });
     nodes.push(steps);
+    // Only said when the service really sends it, so the page never promises an email that won't come.
+    if (emailed) {
+      nodes.push(el('p', 'claim-mail', 'We’ve also emailed ' + (keys.length > 1 ? 'these keys' : 'this key') + ' to ' +
+        (email || 'the address you paid with') + '. If you ever lose it, search your inbox for “Mac ID licence key” and it’ll be there.'));
+    }
     nodes.push(el('p', 'claim-help', 'Questions? support@macid.net'));
     show(nodes);
     body.querySelector('h3').id = 'claim-title';
@@ -1183,9 +1202,9 @@ section[id]{scroll-margin-top:var(--nav-h)}
       .then(function (d) {
         if (d && d.status === 'ready') {
           var saved = load() || {};
-          saved.keys = d.keys; saved.name = d.name;
+          saved.keys = d.keys; saved.name = d.name; saved.email = d.email; saved.emailed = !!d.emailed;
           save(saved);
-          showKey(d.keys, d.name);
+          showKey(d.keys, d.name, d.email, !!d.emailed);
           return;
         }
         if (d && d.status === 'delayed') { showDelayed(); return; }
@@ -1232,6 +1251,75 @@ section[id]{scroll-margin-top:var(--nav-h)}
     startCheckout();
   });
 
+  // Lost key: the key is emailed to the address the order was placed with, which is the only
+  // "login" there is. The service answers the same whether or not the address bought anything.
+  function showRecover() {
+    var form = el('form', 'claim-form');
+    var label = el('label', null, 'Email you used at checkout');
+    label.htmlFor = 'recover-email';
+    var input = el('input', 'claim-input');
+    input.type = 'email'; input.id = 'recover-email'; input.required = true; input.autocomplete = 'email';
+    input.placeholder = 'you@example.com';
+    var submit = el('button', 'btn btn-primary', 'Email my key');
+    submit.type = 'submit';
+    var status = el('p', 'claim-status');
+    status.setAttribute('aria-live', 'polite');
+    form.append(label, input, submit, status);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      submit.disabled = true; submit.textContent = 'Sending…'; status.className = 'claim-status'; status.textContent = '';
+      fetch('/api/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ email: input.value }) })
+        .then(function (r) {
+          if (r.ok) {
+            show([el('h3', null, 'Check your inbox'),
+                  el('p', null, 'If ' + input.value.trim() + ' bought Mac ID, your key is on its way to it now. It can take a minute; check spam too.'),
+                  el('p', 'claim-help', 'Nothing arrived? Email support@macid.net.')]);
+            body.querySelector('h3').id = 'claim-title';
+            return;
+          }
+          submit.disabled = false; submit.textContent = 'Email my key'; status.className = 'claim-status warn';
+          status.textContent = r.status === 429 ? 'Too many tries. Please wait an hour and try again.'
+            : r.status === 400 ? 'That doesn’t look like an email address.'
+            : 'Key recovery isn’t available right now. Email support@macid.net and we’ll send your key.';
+        })
+        .catch(function () {
+          submit.disabled = false; submit.textContent = 'Email my key'; status.className = 'claim-status warn';
+          status.textContent = 'Couldn’t reach macid.net. Check your connection and try again.';
+        });
+    });
+    show([el('h3', null, 'Get your licence key'),
+          el('p', null, 'Enter the email you bought Mac ID with and we’ll send your key to it.'), form]);
+    body.querySelector('h3').id = 'claim-title';
+    input.focus();
+  }
+  document.getElementById('recover-link').addEventListener('click', function (e) { e.preventDefault(); showRecover(); });
+
+  // Links from the app: #licence lands on the price card ready to tick and pay; #recover opens the
+  // lost-key form.
+  // On a fresh load this waits for `load`: before then the pinned sequence and images are still
+  // settling the page height, and a scroll made earlier lands in the wrong place or is undone.
+  function goToBuy() {
+    document.querySelector('.price-card').scrollIntoView({ block: 'center', behavior: 'instant' });
+    if (terms) terms.focus({ preventScroll: true });
+  }
+  function handleHash(initial) {
+    if (location.hash === '#licence' || location.hash === '#buy') {
+      goToBuy();
+      // Again once the page has finished settling, unless the visitor has scrolled away since.
+      if (initial === true && document.readyState !== 'complete') {
+        var landed = scrollY;
+        window.addEventListener('load', function () {
+          if (Math.abs(scrollY - landed) < 40) requestAnimationFrame(goToBuy);
+        }, { once: true });
+      }
+    } else if (location.hash === '#recover') {
+      showRecover();
+    }
+  }
+  window.addEventListener('hashchange', handleHash);
+  handleHash(true);
+
   dialog.querySelector('.claim-x').addEventListener('click', function () { dialog.hidden = true; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dialog.hidden = true; });
 
@@ -1262,7 +1350,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
   var saved = load();
   var fresh = saved && saved.created && Date.now() - saved.created < POLL_FOR_MS;
   if (saved && saved.keys && location.hash === '#key') {
-    showKey(saved.keys, saved.name);
+    showKey(saved.keys, saved.name, saved.email, saved.emailed);
   } else if (saved && saved.token && !saved.keys && (fresh || location.hash === '#key')) {
     showWaiting();
     pollUntil = Date.now() + POLL_FOR_MS;

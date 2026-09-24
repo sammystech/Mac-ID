@@ -125,6 +125,12 @@ struct AboutSettingsPage: View {
                                 .font(.caption)
                                 .foregroundStyle(.red)
                         }
+                        HStack(spacing: 10) {
+                            Link("Buy a licence — $4.99", destination: LicenseLinks.buy)
+                            Text("·").foregroundStyle(SettingsMetrics.textTertiary)
+                            Link("Lost your key?", destination: LicenseLinks.recover)
+                        }
+                        .font(.system(size: 11))
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)

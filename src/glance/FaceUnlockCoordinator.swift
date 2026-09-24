@@ -193,7 +193,7 @@ final class FaceUnlockCoordinator {
     /// matters, because a running session lights the recording indicator.
     private func prewarmCamera() {
         guard isEnabled,
-              LicenseManager.shared.isEntitled,
+              Self.isEntitledNow(),
               SecureCredentialManager.isSessionUnlocked,
               SecureCredentialManager.hasStoredPassword()
         else { return }
@@ -232,8 +232,7 @@ final class FaceUnlockCoordinator {
         // Gated here rather than deeper in the scan so an unlicensed copy never turns the camera on.
         // `isEntitled` covers a paid key or a live trial; the trial's remaining days are re-checked
         // here rather than cached, so it stops working the moment it lapses mid-session.
-        TrialManager.shared.refresh()
-        guard LicenseManager.shared.isEntitled else {
+        guard Self.isEntitledNow() else {
             statusMessage = "Your free trial has ended — add a licence key in Settings → About."
             abandonPrewarm()
             return
@@ -358,6 +357,14 @@ final class FaceUnlockCoordinator {
     }
 
     /// Called on arm, and again whenever the overlay hover-activates.
+    /// A paid licence, or a trial that is still running as of this moment. `isEntitled` alone reads
+    /// the trial state as of its last refresh, which for a long-running app can be a day stale.
+    static func isEntitledNow() -> Bool {
+        if LicenseManager.shared.isLicensed { return true }
+        TrialManager.shared.refresh()
+        return LicenseManager.shared.isEntitled
+    }
+
     private func startScanCycle() {
         scanTask?.cancel()
         scanGeneration &+= 1
@@ -373,6 +380,12 @@ final class FaceUnlockCoordinator {
     /// camera visibly switch on then die mid-warm-up, leaving the surviving cycle polling a dead session and never unlocking.
     private func runScanCycle(generation: Int) async {
         guard LockMonitor.isScreenActuallyLocked() else { return }
+        // Re-checked per scan, not just when the overlay armed: hovering the notch or a retry starts a
+        // scan on an overlay armed hours earlier, possibly before the trial ran out overnight.
+        guard Self.isEntitledNow() else {
+            statusMessage = "Your free trial has ended — add a licence key in Settings → About."
+            return
+        }
 
         let scanStartedAt = ContinuousClock.now
         await camera.start()
@@ -649,6 +662,8 @@ final class FaceUnlockCoordinator {
                     ? (confirmingCue.map { "live via \($0.title)" } ?? "liveness clear")
                     : "liveness off"
                 lastOutcome = "Matched \(readyMatch.identity.name) at \(String(format: "%.3f", readyMatch.centroidSimilarity)), \(livenessNote)."
+                // The last line of defence: whatever path led here, an unlicensed copy never types.
+                guard Self.isEntitledNow() else { return .injectionFailed }
                 guard await pocController.injectStoredPassword(requireAuthoritativeLock: true) else {
                     return .injectionFailed
                 }
