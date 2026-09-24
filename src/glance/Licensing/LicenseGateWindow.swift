@@ -69,6 +69,10 @@ final class LicenseGateWindow {
             backing: .buffered,
             defer: false
         )
+        // This object owns the window. Left at AppKit's default (true), `close()` frees it as well,
+        // and dropping our reference afterwards releases it a second time: the app crashes the
+        // moment the gate is dismissed. Same setting as NotchWindow and the enrollment panel.
+        window.isReleasedWhenClosed = false
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true

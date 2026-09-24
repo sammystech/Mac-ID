@@ -216,6 +216,12 @@ fi
     && tiffutil -cathidpicheck "$BUILD_DIR/background.png" "$BUILD_DIR/background@2x.png" \
         -out "$BUILD_DIR/background.tiff" >/dev/null 2>&1 \
     || die "Couldn't draw the installer background."
+# dmgbuild mounts the new image as /Volumes/<name>; an installer left open from an earlier download
+# has that name already and makes the build fail. It's a read-only image, so ejecting it is safe.
+if [[ -d "/Volumes/$APP_NAME" ]]; then
+    warn "ejecting the open \"$APP_NAME\" disk image so the new one can be built"
+    diskutil eject "/Volumes/$APP_NAME" >/dev/null || die "Eject the \"$APP_NAME\" disk image in Finder, then run with --resume."
+fi
 "$DMG_VENV/bin/dmgbuild" -s "$DMG_TOOLS/dmg_settings.py" -D app="$APP" \
     -D background="$BUILD_DIR/background.tiff" "$APP_NAME" "$DMG" >/dev/null 2>&1 \
     || die "dmgbuild failed to make the installer DMG."
@@ -318,7 +324,7 @@ Deleting is permanent, so run it yourself once this release is live:
 
 The same notarized build is the one for this Mac too:
 
-    ditto "$APP" "$HOME/mac-id/$APP_NAME.app"
+    ditto "$APP" "/Applications/$APP_NAME.app"
 
 Then confirm the feed is actually live before trusting it:
 
