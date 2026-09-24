@@ -63,40 +63,33 @@ struct RecognitionSettingsPage: View {
                     index: matchConfidenceIndex,
                     stopCount: MatchConfidenceLevel.allCases.count
                 )
-
-                SettingsGroupDivider()
-
-                SettingsOptionSliderRowContent(
-                    title: "Detection distance",
-                    stepLabels: DetectionDistanceLevel.allCases.map(\.title),
-                    index: detectionDistanceIndex,
-                    stopCount: DetectionDistanceLevel.allCases.count
-                )
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 SettingsSectionTitle(text: "Liveness")
                 SettingsGroup {
-                    SettingsRowContent(
-                        title: "Liveness detection",
-                        subtitle: "Checks that you're a live person, not a photo. May increase unlock time.",
-                        subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
-                    ) {
-                        MacIDToggle(isOn: $settings.livenessChecksEnabled)
-                    }
-                    SettingsGroupDivider()
-                    LivenessModePicker(
-                        selection: $settings.livenessMode,
-                        isEnabled: settings.livenessChecksEnabled
-                    )
-                    SettingsGroupDivider()
-                    PrintedPhotoSensitivityPicker(
-                        selection: $settings.printedPhotoSensitivity,
-                        isEnabled: settings.livenessChecksEnabled
+                    SettingsOptionSliderRowContent(
+                        title: "Liveness protection",
+                        stepLabels: LivenessProtection.allCases.map(\.title),
+                        index: livenessProtectionIndex,
+                        stopCount: LivenessProtection.allCases.count
                     )
                 }
+                SettingsCaption(text: LivenessProtection(settings: settings).summary)
             }
         }
+    }
+
+    // MARK: - Liveness protection
+
+    private var livenessProtectionIndex: Binding<Double> {
+        Binding(
+            get: { Double(LivenessProtection(settings: settings).rawValue) },
+            set: { value in
+                let clamped = min(max(Int(value.rounded()), 0), LivenessProtection.allCases.count - 1)
+                LivenessProtection(rawValue: clamped)?.apply(to: settings)
+            }
+        )
     }
 
     // MARK: - Match confidence
@@ -111,19 +104,6 @@ struct RecognitionSettingsPage: View {
         Binding(
             get: { matchConfidenceLevel.sliderIndex },
             set: { coordinator.matchThreshold = MatchConfidenceLevel.from(sliderIndex: $0).threshold }
-        )
-    }
-
-    // MARK: - Detection distance
-
-    private var detectionDistanceLevel: DetectionDistanceLevel {
-        .nearest(to: settings.minimumFaceWidth)
-    }
-
-    private var detectionDistanceIndex: Binding<Double> {
-        Binding(
-            get: { detectionDistanceLevel.sliderIndex },
-            set: { settings.minimumFaceWidth = DetectionDistanceLevel.from(sliderIndex: $0).minimumFaceWidth }
         )
     }
 
@@ -173,39 +153,5 @@ private enum MatchConfidenceLevel: Int, CaseIterable {
 
     static func nearest(to threshold: Float) -> Self {
         allCases.min { abs($0.threshold - threshold) < abs($1.threshold - threshold) } ?? .standard
-    }
-}
-
-/// The three selectable points on the "Detection distance" slider.
-private enum DetectionDistanceLevel: Int, CaseIterable {
-    case close, standard, far
-
-    var title: String {
-        switch self {
-        case .close: return "Close"
-        case .standard: return "Default"
-        case .far: return "Far"
-        }
-    }
-
-    var minimumFaceWidth: Float {
-        switch self {
-        case .close: return 0.23
-        case .standard: return 0.19
-        case .far: return 0.15
-        }
-    }
-
-    var sliderIndex: Double {
-        Double(Self.allCases.firstIndex(of: self) ?? 0)
-    }
-
-    static func from(sliderIndex: Double) -> Self {
-        let clamped = Int(sliderIndex.rounded())
-        return allCases.indices.contains(clamped) ? allCases[clamped] : .standard
-    }
-
-    static func nearest(to width: Float) -> Self {
-        allCases.min { abs($0.minimumFaceWidth - width) < abs($1.minimumFaceWidth - width) } ?? .standard
     }
 }

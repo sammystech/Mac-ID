@@ -3,12 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mac ID — Unlock your Mac with a look</title>
-<meta name="description" content="Face unlock for macOS. Mac ID recognises your face at the lock screen and unlocks your Mac, with recognition running entirely on the Mac. 1-day free trial, then $4.99 once.">
+<title>Mac ID — Face Unlock &amp; Facial Recognition for Mac</title>
+<meta name="description" content="Facial recognition software for Mac. Mac ID unlocks your MacBook with your face at the lock screen — no typing, all on-device. Try it free for a day, then $4.99 once.">
+<link rel="canonical" href="https://macid.net/">
 <meta name="theme-color" content="#0A0A0C">
 <meta name="color-scheme" content="dark">
-<meta property="og:title" content="Mac ID — Unlock your Mac with a look">
-<meta property="og:description" content="Face unlock for macOS. Recognition runs entirely on your Mac. $4.99 once, with a 1-day free trial.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mac ID">
+<meta property="og:url" content="https://macid.net/">
+<meta property="og:title" content="Mac ID — Face Unlock &amp; Facial Recognition for Mac">
+<meta property="og:description" content="Unlock your Mac with your face. Facial recognition that runs entirely on your Mac. 1-day free trial, then $4.99 once.">
+<meta property="og:image" content="https://macid.net/assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Mac ID — Face unlock for your Mac">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Mac ID — Face Unlock &amp; Facial Recognition for Mac">
+<meta name="twitter:description" content="Unlock your Mac with your face. Facial recognition that runs entirely on your Mac.">
+<meta name="twitter:image" content="https://macid.net/assets/og-card.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Mac ID",
+  "alternateName": ["MacID", "Mac ID face unlock"],
+  "description": "Facial recognition software for Mac. Mac ID recognises your face at the macOS lock screen and unlocks your Mac, with recognition running entirely on the Mac.",
+  "applicationCategory": "SecurityApplication",
+  "operatingSystem": "macOS 15 or later",
+  "url": "https://macid.net/",
+  "downloadUrl": "https://github.com/sammystech/Mac-ID/releases/latest/download/Mac-ID.dmg",
+  "image": "https://macid.net/assets/og-card.png",
+  "offers": {
+    "@type": "Offer",
+    "price": "4.99",
+    "priceCurrency": "USD",
+    "url": "https://macid.net/#licence"
+  }
+}
+</script>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="preload" as="image" href="assets/wallpaper.webp" type="image/webp" fetchpriority="high">
 <style>
@@ -422,7 +454,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
     <div class="grid hero-grid">
       <h1 id="hero-title" class="h1">Unlock your Mac with a look.</h1>
       <div class="hero-side">
-        <p class="lede">Mac ID recognises your face when the lock screen appears and unlocks your Mac — no typing, no reaching for a key. Your face is processed on the Mac and never leaves it.</p>
+        <p class="lede">Mac ID is face unlock for your Mac. It recognises your face when the lock screen appears and unlocks your Mac — no typing, no reaching for a key. Your face is processed on the Mac and never leaves it.</p>
         <div class="cta">
           <a class="btn btn-primary" href="#download"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-down"/></svg>Download for Mac</a>
           <a class="btn btn-secondary" href="#pricing">Buy a licence · $4.99</a>
@@ -563,9 +595,14 @@ section[id]{scroll-margin-top:var(--nav-h)}
           <dd class="desc">Your face is matched by an ArcFace model running on the Apple Neural Engine, entirely on the Mac. Your face never leaves it.</dd>
         </div>
         <div class="spec-row">
+          <dt>More than one face</dt>
+          <dd class="datum">Multiple people</dd>
+          <dd class="desc">Enrol everyone who shares your Mac&rsquo;s login — a partner, a family member — and any of them can unlock it with a look. Add people in Settings → Your Face; you can also enrol yourself again with glasses or in different lighting to make recognition more reliable.</dd>
+        </div>
+        <div class="spec-row">
           <dt>Refuses photos</dt>
-          <dd class="datum">Liveness check</dd>
-          <dd class="desc">A liveness check rejects a printed photo and a photo shown on a phone screen. It does not reliably reject a video — <a class="link" href="#limits">see the limits</a>.</dd>
+          <dd class="datum">Liveness · 3 levels</dd>
+          <dd class="desc">Choose Minimal, Medium or Max protection. Medium and Max reject a printed photo and a photo shown on a phone screen; Max also waits for a sign of a real face, like a blink. More protection takes a little longer. None of them reliably rejects a video — <a class="link" href="#limits">see the limits</a>.</dd>
         </div>
         <div class="spec-row">
           <dt>Your password stays encrypted</dt>

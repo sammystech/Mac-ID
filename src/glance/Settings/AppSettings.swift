@@ -53,6 +53,65 @@ enum UnlockAnimationStyle: String, CaseIterable, Identifiable {
     static let selectableCases: [UnlockAnimationStyle] = [.minimal, .original]
 }
 
+/// Liveness as one three-step choice. Each level is a fixed combination of the underlying switches
+/// (`livenessChecksEnabled`, `livenessMode`, `printedPhotoSensitivity`), which stay the storage so
+/// scans, Face Lab and older preferences all keep reading the same values.
+enum LivenessProtection: Int, CaseIterable, Identifiable {
+    /// Face match only. Fastest; a photo of you could get in.
+    case minimal
+    /// Deny cues on: rejects a printed photo and a photo on a phone screen. The default.
+    case medium
+    /// Deny cues plus a required proof of life (blink, depth, head turn), and the stricter
+    /// printed-photo check. Slowest; can wait on someone holding perfectly still.
+    case max
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .minimal: return "Minimal"
+        case .medium: return "Medium"
+        case .max: return "Max"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .minimal:
+            return "Minimal protection, fastest. Only checks that it's your face, so a photo of you could unlock your Mac."
+        case .medium:
+            return "Medium protection. Also rejects a printed photo or a photo on a phone screen. Slightly slower."
+        case .max:
+            return "Max protection, slowest. Also waits for a sign of a real face, like a blink or a slight head turn."
+        }
+    }
+
+    @MainActor init(settings: AppSettings) {
+        if !settings.livenessChecksEnabled {
+            self = .minimal
+        } else if settings.livenessMode == .heavy {
+            self = .max
+        } else {
+            self = .medium
+        }
+    }
+
+    @MainActor func apply(to settings: AppSettings) {
+        switch self {
+        case .minimal:
+            settings.livenessChecksEnabled = false
+        case .medium:
+            settings.livenessChecksEnabled = true
+            settings.livenessMode = .light
+            settings.printedPhotoSensitivity = .standard
+        case .max:
+            settings.livenessChecksEnabled = true
+            settings.livenessMode = .heavy
+            settings.printedPhotoSensitivity = .strict
+        }
+    }
+}
+
 /// What can prompt Face Unlock. Multi-select; at least one is always kept
 /// selected, since a Mac with none armed would never show the notch.
 enum UnlockTrigger: String, CaseIterable, Identifiable {
@@ -89,7 +148,9 @@ enum UnlockTrigger: String, CaseIterable, Identifiable {
 final class AppSettings {
     static let shared: AppSettings = {
         LegacyMigration.migrateIfNeeded()
-        return AppSettings()
+        let settings = AppSettings()
+        settings.normalizeLivenessProtection()
+        return settings
     }()
 
     private enum Key {
@@ -291,8 +352,10 @@ final class AppSettings {
             .flatMap(LivenessMode.init(rawValue:)) ?? .light
         printedPhotoSensitivity = defaults.string(forKey: Key.printedPhotoSensitivity)
             .flatMap(PrintedPhotoSensitivity.init(rawValue:)) ?? .standard
-        // Matches `DetectionDistanceLevel.standard` — see RecognitionSettingsPage.swift.
-        minimumFaceWidth = defaults.object(forKey: Key.minimumFaceWidth) as? Float ?? 0.21
+        // No longer a setting: always the old "Far" stop, the smallest face the pipeline accepts,
+        // so Mac ID works from close up to arm's length and beyond without anyone tuning it. A
+        // closer face is always fine; this is only a minimum.
+        minimumFaceWidth = Self.allDistancesFaceWidth
 
         // Resolve the stored style first, `.none` included, then split it
         // into the pick + the on/off flag the UI now works in.
@@ -345,7 +408,17 @@ final class AppSettings {
         hasAcknowledgedSecurityNotice = defaults.object(forKey: Key.hasAcknowledgedSecurityNotice) as? Bool ?? false
 
         // Push into the nonisolated mirror immediately, or FaceRecognitionPipeline
-        // would keep its own default until the slider is first touched.
+        // would keep its own default.
         FaceRecognitionPipeline.minimumProminentFaceWidth = minimumFaceWidth
+    }
+
+    static let allDistancesFaceWidth: Float = 0.15
+
+    /// Snaps liveness preferences saved by older versions (any mix of the old toggle and pickers)
+    /// onto the nearest of the three levels, so what the slider shows is what scans do. Run after
+    /// `shared` exists: an initialiser's own assignments don't reach `didSet`, so they wouldn't
+    /// be saved.
+    func normalizeLivenessProtection() {
+        LivenessProtection(settings: self).apply(to: self)
     }
 }
