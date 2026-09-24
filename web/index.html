@@ -4,403 +4,1104 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mac ID — Unlock your Mac with a look</title>
-<meta name="description" content="Face unlock for macOS. Everything runs on-device; your face never leaves your Mac.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="description" content="Face unlock for macOS. Mac ID recognises your face at the lock screen and unlocks your Mac, with recognition running entirely on the Mac. 1-day free trial, then $4.99 once.">
+<meta name="theme-color" content="#0A0A0C">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Mac ID — Unlock your Mac with a look">
+<meta property="og:description" content="Face unlock for macOS. Recognition runs entirely on your Mac. $4.99 once, with a 1-day free trial.">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="preload" as="image" href="assets/wallpaper.webp" type="image/webp" fetchpriority="high">
 <style>
+/* =====================================================================  tokens */
 :root{
-  --violet:#6D4AFF; --violet-lit:#8E72FF; --indigo:#4A2FD0;
-  --ink:#0B0A12; --ink-2:#12101D;
-  --text:#F4F3FA; --text-dim:#A8A4C0; --text-faint:#726E8C;
-  --glass:rgba(255,255,255,.055);
-  --glass-hi:rgba(255,255,255,.10);
-  --edge:rgba(255,255,255,.12);
-  --edge-lit:rgba(255,255,255,.22);
-  --radius:22px;
-  --maxw:1080px;
+  color-scheme:dark;
+  --bg:#0A0A0C; --bg-2:#0F0F12; --bg-3:#16161A; --bg-4:#1F1F25;
+  --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14); --line-3:rgba(255,255,255,.24);
+  --fg:#F2F2F4; --fg-2:#A7A7B1; --fg-3:#84848E;
+  --accent:#6D4AFF; --accent-hi:#7D5EFF; --accent-ink:#B4A5FF;
+  --scan:#3C9CFF; --ok:#30D158; --warn:#F2B04A;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --maxw:1240px; --gutter:clamp(16px,4.2vw,48px); --nav-h:56px; --col-gap:24px;
+  --r-s:10px; --r-m:14px; --r-l:22px;
+  --ease-out:cubic-bezier(.22,1,.36,1);
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+
+/* =====================================================================  base */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 body{
-  background:var(--ink); color:var(--text);
-  font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
-  -webkit-font-smoothing:antialiased; line-height:1.55; overflow-x:hidden;
+  margin:0; background:var(--bg); color:var(--fg);
+  font:400 clamp(16px,15.2px + .22vw,17px)/1.55 var(--font); letter-spacing:-.006em;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  overflow-x:clip; font-kerning:normal;
 }
-/* Ambient colour that the frosted panels actually have something to refract. */
-body::before{
-  content:""; position:fixed; inset:-20vh -10vw; z-index:-2; pointer-events:none;
-  background:
-    radial-gradient(48vw 48vw at 12% 4%,  rgba(109,74,255,.40), transparent 60%),
-    radial-gradient(42vw 42vw at 88% 22%, rgba(38,180,255,.22), transparent 62%),
-    radial-gradient(52vw 52vw at 50% 92%, rgba(74,47,208,.30), transparent 66%);
-  filter:blur(20px);
-}
-body::after{
-  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
-}
-.wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+h1,h2,h3,h4,p,ul,ol,dl,dd,figure,table{margin:0;padding:0}
+ul,ol{list-style:none}
+img,svg,video,canvas{display:block;max-width:100%}
+a{color:inherit}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px;border-radius:6px}
+::selection{background:rgba(109,74,255,.45)}
+section[id]{scroll-margin-top:var(--nav-h)}
+.wrap{max-width:calc(var(--maxw) + 2 * var(--gutter));margin-inline:auto;padding-inline:var(--gutter)}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:var(--col-gap)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip{position:absolute;left:12px;top:-64px;z-index:100;padding:10px 14px;border-radius:10px;background:var(--fg);color:var(--bg);font-weight:600;text-decoration:none}
+.skip:focus{top:12px}
 
-/* ---------------------------------------------------------------- glass */
-.glass{
-  background:linear-gradient(150deg, var(--glass-hi), var(--glass));
-  border:1px solid var(--edge);
-  border-radius:var(--radius);
-  backdrop-filter:blur(28px) saturate(175%);
-  -webkit-backdrop-filter:blur(28px) saturate(175%);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,.14) inset,
-    0 -1px 0 rgba(0,0,0,.22) inset,
-    0 26px 60px -24px rgba(0,0,0,.75);
-  position:relative; overflow:hidden;
-}
-/* The specular sweep across the top edge — what sells it as glass rather than a grey box. */
-.glass::before{
-  content:""; position:absolute; inset:0 0 auto 0; height:52%;
-  background:linear-gradient(180deg, rgba(255,255,255,.16), transparent);
-  pointer-events:none;
-}
+/* =====================================================================  type */
+.h1{font-size:clamp(2.6rem,.9rem + 6.5vw,7.25rem);line-height:.98;letter-spacing:-.032em;font-weight:600;text-wrap:balance}
+.h2{font-size:clamp(2.05rem,1.05rem + 3.2vw,4.2rem);line-height:1.03;letter-spacing:-.03em;font-weight:600;text-wrap:balance}
+.lede{font-size:clamp(1.1rem,1rem + .42vw,1.33rem);line-height:1.46;letter-spacing:-.012em;color:var(--fg-2);text-wrap:pretty}
+.label{font-size:.9rem;font-weight:600;letter-spacing:-.004em;color:var(--accent-ink);margin-bottom:18px}
+.mono{font-family:var(--mono);font-size:.8125rem;letter-spacing:0}
+.tnum{font-variant-numeric:tabular-nums}
+.ui{color:var(--fg);white-space:nowrap}
+.link{color:var(--accent-ink);text-decoration:underline;text-decoration-color:rgba(180,165,255,.4);text-underline-offset:3px}
+.link:hover{text-decoration-color:currentColor}
 
-/* ---------------------------------------------------------------- nav */
-nav{position:sticky; top:0; z-index:50; padding:14px 0}
-.navbar{
-  display:flex; align-items:center; gap:14px; padding:11px 18px; border-radius:18px;
-  background:rgba(12,10,22,.55); border:1px solid var(--edge);
-  backdrop-filter:blur(24px) saturate(180%); -webkit-backdrop-filter:blur(24px) saturate(180%);
-}
-.brand{display:flex; align-items:center; gap:11px; font-weight:650; letter-spacing:-.01em}
-.brand svg{width:29px;height:29px;flex:none}
-.navlinks{margin-left:auto; display:flex; gap:10px; align-items:center}
-.navlinks a{color:var(--text-dim); text-decoration:none; font-size:14.5px; padding:7px 12px; border-radius:10px; transition:.18s}
-.navlinks a:hover{color:var(--text); background:rgba(255,255,255,.07)}
-
-/* ---------------------------------------------------------------- buttons */
+/* =====================================================================  buttons */
 .btn{
-  display:inline-flex; align-items:center; justify-content:center; gap:9px;
-  padding:13px 24px; border-radius:14px; font-weight:600; font-size:15px;
-  text-decoration:none; border:1px solid transparent; cursor:pointer; transition:.2s; white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  height:48px;padding:0 22px;border-radius:12px;border:1px solid transparent;
+  font:600 1rem/1 var(--font);letter-spacing:-.012em;text-decoration:none;white-space:nowrap;cursor:pointer;
+  transition:background-color .15s,border-color .15s,color .15s;
 }
-.btn-primary{
-  background:linear-gradient(165deg, var(--violet-lit), var(--indigo));
-  color:#fff; border-color:rgba(255,255,255,.22);
-  box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 14px 34px -12px rgba(109,74,255,.85);
-}
-.btn-primary:hover{transform:translateY(-2px); box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 20px 42px -12px rgba(109,74,255,.95)}
-.btn-ghost{background:rgba(255,255,255,.07); color:var(--text); border-color:var(--edge)}
-.btn-ghost:hover{background:rgba(255,255,255,.12); border-color:var(--edge-lit)}
+.btn:active{transform:translateY(1px)}
+.btn svg{width:18px;height:18px;flex:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hi)}
+.btn-secondary{background:transparent;color:var(--fg);border-color:var(--line-3)}
+.btn-secondary:hover{border-color:rgba(255,255,255,.42);background:rgba(255,255,255,.035)}
+.btn-sm{height:34px;padding:0 14px;border-radius:9px;font-size:.875rem}
 
-/* ---------------------------------------------------------------- hero */
-header{padding:86px 0 68px; text-align:center; position:relative}
-.pill{
-  display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
-  background:rgba(255,255,255,.07); border:1px solid var(--edge);
-  font-size:13px; color:var(--text-dim); margin-bottom:26px;
+/* =====================================================================  nav */
+.top{
+  position:sticky;top:0;z-index:40;border-bottom:1px solid var(--line);
+  background:rgba(10,10,12,.84);-webkit-backdrop-filter:saturate(150%) blur(14px);backdrop-filter:saturate(150%) blur(14px);
 }
-.dot{width:6px;height:6px;border-radius:50%;background:#46E39B;box-shadow:0 0 10px #46E39B}
-h1{
-  font-size:clamp(2.6rem, 6.4vw, 4.6rem); font-weight:700; letter-spacing:-.035em; line-height:1.04;
-  background:linear-gradient(175deg,#fff 30%, #B9AEFF); -webkit-background-clip:text;
-  background-clip:text; color:transparent; margin-bottom:20px;
-}
-.sub{font-size:clamp(1.02rem,2.1vw,1.24rem); color:var(--text-dim); max-width:620px; margin:0 auto 34px}
-.cta{display:flex; gap:13px; justify-content:center; flex-wrap:wrap}
-.meta{margin-top:17px; font-size:13.5px; color:var(--text-faint)}
+.nav{height:var(--nav-h);display:flex;align-items:center;gap:28px}
+.brand{display:inline-flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.015em;text-decoration:none}
+.brand svg{width:26px;height:26px}
+.nav-links{display:flex;gap:28px;margin-left:auto;font-size:.875rem;color:var(--fg-2)}
+.nav-links a{text-decoration:none;transition:color .15s}
+.nav-links a:hover{color:var(--fg)}
+@media (max-width:720px){.nav-links{display:none}.nav .btn{margin-left:auto}}
 
-/* ---------------------------------------------------------------- the notch visual */
-.stage{margin:60px auto 0; max-width:760px; padding:36px 28px 44px}
-.mac{
-  position:relative; margin:0 auto; width:min(100%,560px); aspect-ratio:16/10;
-  border-radius:16px; background:linear-gradient(170deg,#1B1828,#0D0B16);
-  border:1px solid var(--edge); overflow:hidden;
-}
-.notch{
-  position:absolute; top:0; left:50%; transform:translateX(-50%);
-  width:190px; height:34px; background:#000; border-radius:0 0 17px 17px;
-  display:flex; align-items:center; justify-content:center; gap:9px; z-index:3;
-}
-.scan{width:15px;height:15px;border-radius:5px;border:2px solid var(--violet-lit); position:relative}
-.scan::after{
-  content:""; position:absolute; left:-2px; right:-2px; height:2px; background:var(--violet-lit);
-  top:50%; border-radius:2px; box-shadow:0 0 8px var(--violet-lit);
-  animation:sweep 2.4s ease-in-out infinite;
-}
-@keyframes sweep{0%,100%{transform:translateY(-7px);opacity:.35}50%{transform:translateY(6px);opacity:1}}
-.notchtext{font-size:11.5px; color:#CFC7FF; font-weight:500; letter-spacing:.01em}
-.face{
-  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-}
-.face svg{width:150px;height:150px;opacity:.9}
-.ring{
-  position:absolute; width:210px; height:210px; border-radius:50%;
-  border:2px dashed rgba(142,114,255,.5); animation:spin 14s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
+/* =====================================================================  hero */
+.hero{padding:clamp(44px,6vw,88px) 0 clamp(64px,8vw,120px)}
+.hero-grid{row-gap:28px;align-items:end}
+.hero h1{grid-column:1/span 8}
+.hero-side{grid-column:9/-1;padding-bottom:.35em}
+.hero-side .lede{margin-bottom:28px}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.meta{margin-top:18px;font-size:.875rem;color:var(--fg-3)}
+@media (max-width:1023px){.hero h1,.hero-side{grid-column:1/-1}.hero-side{max-width:620px}}
+@media (max-width:420px){.hero .cta .btn{flex:1 1 100%}}
 
-/* ---------------------------------------------------------------- sections */
-section{padding:74px 0}
-.eyebrow{font-size:12.5px; font-weight:650; letter-spacing:.13em; text-transform:uppercase; color:var(--violet-lit); margin-bottom:13px}
-h2{font-size:clamp(1.85rem,4vw,2.6rem); font-weight:670; letter-spacing:-.025em; margin-bottom:16px}
-.lede{color:var(--text-dim); max-width:640px; margin-bottom:40px; font-size:1.04rem}
-.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(272px,1fr)); gap:18px}
-.card{padding:27px}
-.card h3{font-size:1.1rem; font-weight:620; margin-bottom:9px; letter-spacing:-.012em}
-.card p{color:var(--text-dim); font-size:.945rem}
-.ico{
-  width:42px;height:42px;border-radius:12px; display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(160deg, rgba(142,114,255,.34), rgba(74,47,208,.20));
-  border:1px solid var(--edge); margin-bottom:17px;
+.demo{margin-top:clamp(44px,7vw,100px)}
+.demo .mac{max-width:1120px}
+.demo-bar{
+  max-width:1120px;margin:26px auto 0;display:flex;align-items:center;gap:16px;min-height:34px;
+  font-family:var(--mono);font-size:.8125rem;color:var(--fg-3);
 }
-.ico svg{width:21px;height:21px;stroke:var(--violet-lit);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-
-/* ---------------------------------------------------------------- pricing */
-.price-wrap{display:flex; justify-content:center}
-.price{padding:40px 36px; text-align:center; max-width:410px; width:100%}
-.amount{font-size:3.5rem; font-weight:700; letter-spacing:-.04em; line-height:1}
-.amount span{font-size:1.05rem; color:var(--text-dim); font-weight:500; letter-spacing:0}
-.plist{list-style:none; text-align:left; margin:26px 0 28px; display:grid; gap:11px}
-.plist li{display:flex; gap:11px; align-items:flex-start; color:var(--text-dim); font-size:.945rem}
-.check{width:19px;height:19px;flex:none;margin-top:2px;stroke:#46E39B;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-
-/* ---------------------------------------------------------------- honesty panel */
-.note{padding:26px 28px; border-color:rgba(255,196,84,.26); background:linear-gradient(150deg, rgba(255,196,84,.10), rgba(255,196,84,.035))}
-.note h3{font-size:1.02rem; margin-bottom:9px; color:#FFD08A}
-.note p{color:#D8C7A8; font-size:.93rem}
-.note p + p{margin-top:9px}
-.note ol.steps{margin:12px 0 12px 18px; padding:0; display:flex; flex-direction:column; gap:8px}
-.note ol.steps li{color:#D8C7A8; font-size:.93rem; line-height:1.55; padding-left:4px}
-.note ol.steps li::marker{color:#FFD08A; font-variant-numeric:tabular-nums}
-.note ol.steps strong{color:#FFD08A; font-weight:600}
-
-
-/* ---------------------------------------------------------------- steps */
-.steps{counter-reset:s; display:grid; gap:14px}
-.step{display:flex; gap:17px; align-items:flex-start; padding:21px 24px}
-.step::before{
-  counter-increment:s; content:counter(s);
-  width:31px;height:31px;flex:none;border-radius:10px;
-  background:linear-gradient(160deg,var(--violet-lit),var(--indigo));
-  display:flex;align-items:center;justify-content:center;font-weight:670;font-size:14.5px;
+.ticker{flex:1;min-width:0;display:flex;align-items:center;gap:10px;color:var(--fg-2)}
+.ticker span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticker i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--fg-3);transition:background-color .25s}
+.ticker[data-tone=scan] i{background:var(--scan)}
+.ticker[data-tone=ok] i{background:var(--ok)}
+.demo-note{white-space:nowrap}
+.demo-toggle{
+  visibility:hidden;flex:none;height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--line-2);
+  background:none;color:var(--fg-2);font:500 .8125rem/1 var(--mono);cursor:pointer;display:inline-flex;align-items:center;gap:8px;
 }
-.step h4{font-size:1rem;font-weight:600;margin-bottom:4px}
-.step p{color:var(--text-dim);font-size:.925rem}
-code{font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:.86em; background:rgba(255,255,255,.09); padding:2px 7px; border-radius:6px; border:1px solid var(--edge)}
+.demo-toggle:hover{color:var(--fg);border-color:var(--line-3)}
+.demo-toggle svg{width:12px;height:12px}
+@media (max-width:600px){.demo-note{display:none}}
 
-footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-top:60px}
-.foot{display:flex; gap:18px; align-items:center; flex-wrap:wrap; color:var(--text-faint); font-size:13.5px}
-.foot a{color:var(--text-dim); text-decoration:none}
-.foot a:hover{color:var(--text)}
-.foot .sp{margin-left:auto}
-
-@media (max-width:640px){
-  .navlinks a:not(.btn){display:none}
-  header{padding:54px 0 44px}
-  .stage{padding:22px 14px 30px}
-  .foot .sp{margin-left:0; width:100%}
+/* =====================================================================  the Mac (shared by the demo and the sequence)
+   Everything inside the screen is sized in macOS points of a 1470 x 956 pt display via --pt,
+   so the mock-up is resolution-independent and matches the app's real panel geometry. */
+.mac{position:relative;container-type:inline-size;margin-inline:auto;isolation:isolate}
+.mac-lid{
+  position:relative;width:87cqw;margin-inline:auto;padding:1.05cqw 1.05cqw 1.65cqw;background:#050507;
+  border-radius:2.3cqw 2.3cqw .45cqw .45cqw;
+  box-shadow:0 0 0 .3cqw #1d1e24,0 0 0 calc(.3cqw + 1px) #3a3b44;
 }
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.mac-screen{
+  position:relative;aspect-ratio:1470/956;overflow:hidden;background:#000;
+  border-radius:1.25cqw 1.25cqw .15cqw .15cqw;container-type:inline-size;--pt:calc(100cqw / 1470);
+}
+.mac-base{
+  position:relative;width:100cqw;height:1.9cqw;border-radius:0 0 1.6cqw 1.6cqw / 0 0 1.9cqw 1.9cqw;
+  background:linear-gradient(#4b4d57,#2b2c33 26%,#18191d 70%,#0e0e11);box-shadow:inset 0 1px 0 rgba(255,255,255,.24);
+}
+.mac-base::before{
+  content:"";position:absolute;left:50%;top:0;width:13cqw;height:.62cqw;transform:translateX(-50%);
+  background:linear-gradient(#17181c,#2b2c33);border-radius:0 0 .9cqw .9cqw;
+}
+.mac::after{
+  content:"";position:absolute;z-index:-1;left:4cqw;right:4cqw;bottom:-2.4cqw;height:3.4cqw;
+  background:radial-gradient(50% 50% at 50% 50%,rgba(0,0,0,.75),rgba(0,0,0,0));
+}
+.mac-screen>*{position:absolute}
+.m-wall{inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.045);transform-origin:50% 45%}
+.m-dim{inset:0;background:linear-gradient(180deg,rgba(6,4,18,.36),rgba(6,4,18,.06) 46%,rgba(6,4,18,.42))}
+.m-lock{inset:0;color:#fff;transform-origin:50% 56%}
+.m-status{position:absolute;top:calc(11 * var(--pt));right:calc(20 * var(--pt));height:calc(15 * var(--pt));display:flex;align-items:center;gap:calc(14 * var(--pt));color:#fff}
+.m-status svg,.m-extras svg{height:100%;width:auto}
+.m-clock{position:absolute;left:0;right:0;top:calc(226 * var(--pt));text-align:center}
+.m-date{display:block;font:600 calc(21 * var(--pt))/1.2 var(--font);color:rgba(255,255,255,.84);letter-spacing:.005em}
+.m-time{display:block;margin-top:calc(2 * var(--pt));font:700 calc(124 * var(--pt))/1 ui-rounded,var(--font);letter-spacing:-.012em;color:rgba(255,255,255,.9);font-variant-numeric:tabular-nums}
+.m-user{position:absolute;left:0;right:0;bottom:calc(92 * var(--pt));display:flex;flex-direction:column;align-items:center;gap:calc(16 * var(--pt))}
+.m-avatar{width:calc(64 * var(--pt));height:calc(64 * var(--pt));border-radius:50%;overflow:hidden;background:linear-gradient(180deg,#d9d5e4,#9a94ae);color:rgba(255,255,255,.85)}
+.m-avatar svg{width:100%;height:100%}
+.m-field{position:relative;width:calc(184 * var(--pt));height:calc(30 * var(--pt));border-radius:calc(15 * var(--pt));background:rgba(255,255,255,.2);box-shadow:inset 0 0 0 calc(.8 * var(--pt)) rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+.m-ph{font:500 calc(13 * var(--pt))/1 var(--font);color:rgba(255,255,255,.62);opacity:0}
+.m-dots{position:absolute;inset:0;display:flex;align-items:center;gap:calc(5.5 * var(--pt));padding-left:calc(14 * var(--pt))}
+.m-dots i{width:calc(7 * var(--pt));height:calc(7 * var(--pt));border-radius:50%;background:#fff}
+.m-desk{inset:0;opacity:0}
+.m-menubar{
+  position:absolute;top:0;left:0;right:0;height:calc(37 * var(--pt));padding:0 calc(16 * var(--pt));
+  display:flex;align-items:center;justify-content:space-between;color:#fff;
+  font:500 calc(13.5 * var(--pt))/1 var(--font);background:linear-gradient(rgba(12,8,30,.36),rgba(12,8,30,.2));
+}
+.m-menus,.m-extras{display:flex;align-items:center;gap:calc(19 * var(--pt));height:calc(15 * var(--pt))}
+.m-menus b{font-weight:700}
+.m-extras .m-face{height:calc(16 * var(--pt))}
+.m-mclock{width:calc(112 * var(--pt));text-align:right;white-space:nowrap}
+.m-dock{
+  position:absolute;left:50%;bottom:calc(7 * var(--pt));transform:translateX(-50%);display:flex;gap:calc(8 * var(--pt));
+  padding:calc(7 * var(--pt));border-radius:calc(22 * var(--pt));background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 calc(.8 * var(--pt)) rgba(255,255,255,.2);
+}
+.m-dock i{width:calc(52 * var(--pt));height:calc(52 * var(--pt));border-radius:calc(12.5 * var(--pt));box-shadow:inset 0 calc(1 * var(--pt)) 0 rgba(255,255,255,.35)}
+.m-dock i:nth-child(1){background:linear-gradient(165deg,#ecebf1,#b9b5c6)}
+.m-dock i:nth-child(2){background:linear-gradient(165deg,#7582e0,#3a41a3)}
+.m-dock i:nth-child(3){background:linear-gradient(165deg,#e8a283,#b9644f)}
+.m-dock i:nth-child(4){background:linear-gradient(165deg,#72c2a2,#2e7f63)}
+.m-dock i:nth-child(5){background:linear-gradient(165deg,#e5c67f,#bb9346)}
+.m-dock i:nth-child(6){background:linear-gradient(165deg,#474751,#1d1d23)}
+.m-notch{top:0;left:50%;width:calc(196 * var(--pt));height:calc(32 * var(--pt));margin-left:calc(-98 * var(--pt));background:#000;border-radius:0 0 calc(10 * var(--pt)) calc(10 * var(--pt))}
+/* Mac ID's own panel: a fixed 224 x 210 pt black box, revealed by clip-path (no layout, no shift). */
+.m-island{top:0;left:50%;width:0;height:0}
+.m-island-body{
+  position:absolute;top:0;left:calc(-112 * var(--pt));width:calc(224 * var(--pt));height:calc(210 * var(--pt));background:#000;
+  -webkit-clip-path:inset(0 calc(2 * var(--pt)) calc(10 * var(--pt)) round 0 0 calc(60 * var(--pt)) calc(60 * var(--pt)));
+  clip-path:inset(0 calc(2 * var(--pt)) calc(10 * var(--pt)) round 0 0 calc(60 * var(--pt)) calc(60 * var(--pt)));
+}
+.m-flare{position:absolute;top:0;width:calc(16 * var(--pt));height:calc(16 * var(--pt))}
+.m-flare.l{right:0;transform-origin:100% 0;transform:translateX(calc(-110 * var(--pt)));background:radial-gradient(circle at 0 100%,rgba(0,0,0,0) calc(16 * var(--pt) - .6px),#000 calc(16 * var(--pt)))}
+.m-flare.r{left:0;transform-origin:0 0;transform:translateX(calc(110 * var(--pt)));background:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) calc(16 * var(--pt) - .6px),#000 calc(16 * var(--pt)))}
+.m-scan{top:calc(28 * var(--pt));left:calc(42 * var(--pt));width:calc(140 * var(--pt));height:calc(140 * var(--pt));position:absolute}
+.m-scan img,.m-scan canvas{position:absolute;inset:0;width:100%;height:100%}
+.is-flat .m-lock,.is-flat .m-desk,.is-flat .m-dim,.is-flat .m-scan,.is-flat .m-ph,.is-flat .m-dots i{transition:opacity .3s ease}
 
-/* ---- purchase / licence key screen ---- */
-.claim{position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
-  padding:16px; background:rgba(6,5,14,.62); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
+/* =====================================================================  sections */
+.section{padding-block:clamp(96px,12vw,168px)}
+.rule{border-top:1px solid var(--line)}
+.sec-head{max-width:880px}
+
+/* =====================================================================  how it works: the scroll sequence */
+.seq{padding-top:clamp(96px,12vw,160px)}
+.seq-body{display:grid;grid-template-columns:minmax(0,4.4fr) minmax(0,7.6fr);column-gap:clamp(32px,4.5vw,72px);margin-top:clamp(24px,4vw,48px)}
+.seq-stage{
+  grid-column:2;grid-row:1;align-self:start;position:sticky;top:var(--nav-h);
+  height:calc(100vh - var(--nav-h));height:calc(100svh - var(--nav-h));
+}
+.seq-view{position:absolute;inset:0;overflow:hidden;display:flex;align-items:center}
+.seq-view .mac{width:100%;transform-origin:0 0}
+.seq-fade{position:absolute;top:0;bottom:0;width:56px;z-index:2;pointer-events:none;opacity:0}
+.seq-fade.l{left:0;background:linear-gradient(90deg,var(--bg),rgba(10,10,12,0))}
+.seq-fade.r{right:0;background:linear-gradient(270deg,var(--bg),rgba(10,10,12,0))}
+.seq-steps{grid-column:1;grid-row:1;padding-bottom:18vh}
+.seq-step{min-height:88vh;min-height:88svh;display:flex;align-items:center}
+.seq-copy{max-width:440px}
+.seq-num{display:flex;gap:12px;margin-bottom:16px;font:500 .8125rem/1 var(--mono);color:var(--fg-3)}
+.seq-num b{font-weight:500;color:var(--accent-ink)}
+.seq-copy h3{font-size:clamp(1.6rem,1.05rem + 1.6vw,2.35rem);line-height:1.08;letter-spacing:-.026em;font-weight:600;margin-bottom:14px;text-wrap:balance}
+.seq-copy p{color:var(--fg-2);font-size:1.0625rem;text-wrap:pretty}
+.seq.is-live .seq-step{opacity:.3;transition:opacity .45s var(--ease-out)}
+.seq.is-live .seq-step.is-active{opacity:1}
+@media (max-width:899px){
+  .seq-body{display:block}
+  .seq-stage{
+    z-index:3;height:auto;margin-inline:calc(-1 * var(--gutter));padding:14px var(--gutter) 22px;background:var(--bg);
+  }
+  .seq-stage::after{content:"";position:absolute;left:0;right:0;top:100%;height:44px;background:linear-gradient(var(--bg),rgba(10,10,12,0));pointer-events:none}
+  .seq-view{position:relative;inset:auto;display:block;margin-inline:calc(-1 * var(--gutter));padding:18px var(--gutter) 14px}
+  .seq-view .mac{max-width:560px}
+  .seq-fade{display:none}
+  .seq-steps{padding-bottom:10vh}
+  .seq-step{min-height:74vh;min-height:74svh;align-items:flex-start;padding-top:12vh}
+}
+
+/* =====================================================================  features */
+.feat{row-gap:56px;margin-top:clamp(48px,6vw,88px);align-items:start}
+.figure{grid-column:1/span 5}
+.figure-num{display:flex;align-items:baseline;gap:.12em;font-size:clamp(4.2rem,2.2rem + 6vw,8.4rem);line-height:.9;letter-spacing:-.045em;font-weight:300;font-variant-numeric:tabular-nums}
+.figure-num small{font-size:.3em;font-weight:500;letter-spacing:-.01em;color:var(--fg-2)}
+.figure-cap{margin-top:22px;max-width:360px;color:var(--fg-2)}
+.range{margin-top:32px;max-width:400px}
+.range-track{position:relative;height:6px;border-radius:3px;background:var(--bg-4)}
+.range-fill{position:absolute;top:0;bottom:0;left:7%;width:83%;border-radius:3px;background:var(--accent);transform-origin:0 50%}
+.range-ticks{display:flex;justify-content:space-between;margin-top:11px;font:500 .75rem/1 var(--mono);color:var(--fg-3)}
+@supports (animation-timeline:view()){
+  @media (prefers-reduced-motion:no-preference){
+    .range-fill{animation:range-grow linear both;animation-timeline:view();animation-range:entry 30% cover 50%}
+  }
+}
+@keyframes range-grow{from{transform:scaleX(0)}}
+.spec{grid-column:7/-1;border-top:1px solid var(--line-2)}
+.spec-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;row-gap:8px;padding:22px 0 24px;border-bottom:1px solid var(--line)}
+.spec-row dt{font-size:1.125rem;font-weight:600;letter-spacing:-.016em}
+.spec-row .datum{font:500 .78rem/1.9 var(--mono);color:var(--fg-3);text-align:right;white-space:nowrap}
+.spec-row .desc{grid-column:1/-1;color:var(--fg-2);max-width:62ch}
+@media (max-width:1023px){.figure,.spec{grid-column:1/-1}}
+@media (max-width:520px){.spec-row{grid-template-columns:1fr}.spec-row .datum{text-align:left;grid-row:2}}
+
+/* =====================================================================  setup */
+.setup{margin-top:clamp(48px,6vw,80px);grid-template-columns:repeat(4,minmax(0,1fr));row-gap:48px}
+.setup li{border-top:1px solid var(--line-2);padding-top:22px}
+.setup-n{display:block;margin-bottom:30px;font-size:2.9rem;line-height:1;font-weight:300;letter-spacing:-.04em;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.setup h3{font-size:1.125rem;font-weight:600;letter-spacing:-.016em;margin-bottom:8px}
+.setup p{color:var(--fg-2);font-size:.97rem;text-wrap:pretty}
+@media (max-width:959px){.setup{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.setup{grid-template-columns:1fr;row-gap:36px}.setup-n{font-size:2.2rem;margin-bottom:18px}}
+
+/* =====================================================================  limits */
+.limits{background:var(--bg-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.limits-grid{margin-top:clamp(40px,5vw,72px);row-gap:56px;align-items:start}
+.limits-text{grid-column:1/span 6}
+.limits-side{grid-column:8/-1}
+.limits-statement{font-size:clamp(1.4rem,1.05rem + 1.1vw,1.95rem);line-height:1.22;letter-spacing:-.022em;font-weight:600;margin-bottom:26px;text-wrap:balance}
+.limits-text p:not(.limits-statement){color:var(--fg-2);font-size:1.0625rem;text-wrap:pretty}
+.limits-text p + p{margin-top:16px}
+.glance{border:1px solid var(--line);border-radius:var(--r-l);background:var(--bg);padding:0 24px 24px}
+.glance-panel{position:relative;width:176px;height:150px;margin:0 auto;background:#000;border-radius:0 0 46px 46px}
+.glance-panel::before,.glance-panel::after{content:"";position:absolute;top:0;width:14px;height:14px}
+.glance-panel::before{right:100%;background:radial-gradient(circle at 0 100%,rgba(0,0,0,0) 13.4px,#000 14px)}
+.glance-panel::after{left:100%;background:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) 13.4px,#000 14px)}
+.glance-panel video{position:absolute;left:50%;top:20px;width:104px;height:104px;margin-left:-52px}
+.glance figcaption{margin-top:18px;font-size:.875rem;color:var(--fg-3);text-align:center;text-wrap:balance}
+.facts{width:100%;margin-top:28px;border-collapse:collapse;font-size:.95rem}
+.facts caption{text-align:left;padding-bottom:10px;font:500 .78rem/1 var(--mono);color:var(--fg-3)}
+.facts th,.facts td{padding:12px 0;border-top:1px solid var(--line);vertical-align:top}
+.facts th{width:56%;text-align:left;font-weight:400;color:var(--fg-2);padding-right:16px}
+.facts td{text-align:right;font-weight:600}
+.facts td svg{display:inline-block;width:15px;height:15px;margin-right:6px;vertical-align:-2px}
+.facts .yes svg{color:var(--fg-2)}
+.facts .no{color:var(--warn)}
+@media (max-width:1023px){.limits-text,.limits-side{grid-column:1/-1}.limits-side{max-width:560px}}
+
+/* =====================================================================  pricing */
+.price-grid{row-gap:48px;align-items:start}
+.price-copy{grid-column:1/span 6}
+.price-copy .lede{margin-top:24px;max-width:540px}
+.price-card{grid-column:8/-1;padding:clamp(24px,3vw,36px);border:1px solid var(--line-2);border-radius:var(--r-l);background:var(--bg-3)}
+.price-amount{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;font-size:clamp(3.6rem,2.6rem + 3vw,5.4rem);line-height:1;letter-spacing:-.045em;font-weight:600;font-variant-numeric:tabular-nums}
+.price-amount span{font-size:1.0625rem;font-weight:500;letter-spacing:-.012em;color:var(--fg-2);white-space:nowrap}
+.price-list{margin:28px 0 30px;border-top:1px solid var(--line)}
+.price-list li{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);color:var(--fg-2);font-size:.97rem}
+.price-list svg{flex:none;width:18px;height:18px;margin-top:3px;color:var(--accent-ink)}
+.price-card .btn{width:100%}
+.terms{display:flex;align-items:flex-start;gap:11px;margin:0 0 16px;font-size:.94rem;color:var(--fg-2)}
+.terms input{flex:none;width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}
+.terms label{cursor:pointer}
+.terms a{color:var(--accent-ink);text-decoration:underline;text-decoration-color:rgba(180,165,255,.4);text-underline-offset:3px}
+.terms a:hover{text-decoration-color:currentColor}
+.terms input:focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px;border-radius:4px}
+.terms input[aria-invalid=true]{outline:2px solid var(--warn);outline-offset:3px;border-radius:4px}
+.terms-msg{margin:-6px 0 16px 29px;font-size:.875rem;color:var(--warn)}
+.terms-msg:empty{display:none}
+.price-note{margin-top:14px;font-size:.8125rem;line-height:1.5;color:var(--fg-3)}
+@media (max-width:1023px){.price-copy,.price-card{grid-column:1/-1}.price-card{max-width:520px}}
+
+/* =====================================================================  download */
+.dl-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:32px 48px}
+.dl-head .lede{margin-top:20px;max-width:520px}
+.dl-side{display:flex;flex-direction:column;align-items:flex-start;gap:16px}
+.dl-meta{font-size:.875rem;color:var(--fg-3)}
+.upgrade{margin-top:clamp(56px,7vw,96px);padding-top:26px;border-top:1px solid var(--line);row-gap:12px}
+.upgrade h3{grid-column:1/span 4;font-size:1.125rem;font-weight:600;letter-spacing:-.016em}
+.upgrade p{grid-column:5/-1;color:var(--fg-2);max-width:68ch;text-wrap:pretty}
+@media (max-width:800px){.upgrade h3,.upgrade p{grid-column:1/-1}}
+
+/* =====================================================================  footer */
+.foot{padding:40px 0 56px;border-top:1px solid var(--line);font-size:.875rem;color:var(--fg-3)}
+.foot-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px 28px}
+.foot-row .brand{color:var(--fg);margin-right:auto}
+.foot a:not(.brand){color:var(--fg-2);text-decoration:none}
+.foot a:not(.brand):hover{color:var(--fg)}
+.foot-credit{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
+@media (max-width:640px){.foot-row .brand{flex-basis:100%}}
+
+/* =====================================================================  purchase / licence key screen */
+.claim{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;
+  background:rgba(4,4,6,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .claim[hidden]{display:none}
-.claim-card{position:relative; width:100%; max-width:440px; padding:30px 28px 26px; border-radius:22px; text-align:center}
-.claim-card h3{font-size:1.25rem; margin:14px 0 8px}
-.claim-card p{color:var(--text-dim); font-size:.95rem; line-height:1.55}
-.claim-x{position:absolute; top:12px; right:14px; width:32px; height:32px; border:0; border-radius:10px;
-  background:transparent; color:var(--text-dim); font-size:22px; cursor:pointer}
-.claim-x:hover{background:rgba(255,255,255,.08); color:var(--text)}
-.claim-spin{width:34px; height:34px; margin:4px auto 0; border-radius:50%;
-  border:3px solid rgba(255,255,255,.14); border-top-color:var(--violet-lit); animation:claimspin .9s linear infinite}
+.claim-card{position:relative;width:100%;max-width:440px;padding:32px 28px 26px;border-radius:var(--r-l);text-align:center;
+  background:var(--bg-3);border:1px solid var(--line-2);box-shadow:0 30px 80px -20px rgba(0,0,0,.8)}
+.claim-card h3{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;margin:14px 0 8px}
+.claim-card p{color:var(--fg-2);font-size:.95rem;line-height:1.55}
+.claim-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border:0;border-radius:9px;
+  background:transparent;color:var(--fg-2);font-size:22px;line-height:1;cursor:pointer}
+.claim-x:hover{background:rgba(255,255,255,.07);color:var(--fg)}
+.claim-spin{width:34px;height:34px;margin:4px auto 0;border-radius:50%;
+  border:3px solid rgba(255,255,255,.12);border-top-color:var(--accent-ink);animation:claimspin .9s linear infinite}
 @keyframes claimspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.claim-spin{animation-duration:3s}}
-.claim-key{margin:18px 0 10px; padding:14px 12px; border-radius:14px; background:rgba(0,0,0,.28);
-  border:1px solid var(--edge-lit); font:600 1.22rem/1.2 ui-monospace,"SF Mono",Menlo,monospace;
-  letter-spacing:.06em; color:var(--text); user-select:all; word-break:break-all}
-.claim-steps{margin:14px 0 0; padding:0; list-style:none; text-align:left; font-size:.9rem; color:var(--text-dim)}
-.claim-steps li{padding:5px 0 5px 26px; position:relative}
-.claim-steps li::before{content:counter(step); counter-increment:step; position:absolute; left:0; top:5px;
-  width:18px; height:18px; border-radius:50%; background:rgba(142,114,255,.22); color:var(--violet-lit);
-  font-size:.72rem; font-weight:700; display:flex; align-items:center; justify-content:center}
-.claim-steps{counter-reset:step}
-.claim-ok{width:40px; height:40px; margin:0 auto; border-radius:50%; background:rgba(52,199,89,.16);
-  display:flex; align-items:center; justify-content:center; color:#5BE08A; font-size:22px; font-weight:700}
-.claim-help{margin-top:14px; font-size:.82rem; color:var(--text-faint)}
+.claim-key{margin:18px 0 12px;padding:14px 12px;border-radius:var(--r-m);background:var(--bg);
+  border:1px solid var(--line-3);font:600 1.2rem/1.2 var(--mono);letter-spacing:.06em;color:var(--fg);user-select:all;word-break:break-all}
+.claim-steps{margin:16px 0 0;padding:0;list-style:none;text-align:left;font-size:.9rem;color:var(--fg-2);counter-reset:step}
+.claim-steps li{position:relative;padding:6px 0 6px 28px;border-top:1px solid var(--line)}
+.claim-steps li:first-child{border-top:0}
+.claim-steps li::before{content:counter(step);counter-increment:step;position:absolute;left:0;top:7px;
+  width:19px;height:19px;border-radius:50%;border:1px solid var(--line-3);color:var(--fg-2);
+  font:600 .7rem/17px var(--mono);text-align:center}
+.claim-ok{width:42px;height:42px;margin:0 auto;border-radius:50%;background:rgba(48,209,88,.14);
+  display:flex;align-items:center;justify-content:center;color:var(--ok);font-size:22px;font-weight:700}
+.claim-help{margin-top:14px;font-size:.82rem;color:var(--fg-3)}
 </style>
 </head>
-<body>
+<body id="top">
 
-<nav><div class="wrap"><div class="navbar">
-  <div class="brand">
-    <svg viewBox="0 0 480 480" aria-hidden="true">
-      <rect width="480" height="480" rx="108" fill="url(#bg)"/>
-      <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#8E72FF"/><stop offset="1" stop-color="#4A2FD0"/></linearGradient></defs>
-      <g stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".95">
-        <path d="M120 186 V150 A30 30 0 0 1 150 120 H186"/>
-        <path d="M294 120 H330 A30 30 0 0 1 360 150 V186"/>
-        <path d="M120 294 V330 A30 30 0 0 0 150 360 H186"/>
-        <path d="M294 360 H330 A30 30 0 0 0 360 330 V294"/>
-      </g>
-      <circle cx="240" cy="216" r="40" fill="#fff"/>
-      <path d="M180 320 C180 282 207 254 240 254 C273 254 300 282 300 320 Z" fill="#fff"/>
-    </svg>
-    Mac&nbsp;ID
-  </div>
-  <div class="navlinks">
-    <a href="#how">How it works</a>
-    <a href="#features">Features</a>
-    <a href="#pricing">Pricing</a>
-    <a class="btn btn-primary" style="padding:9px 17px;font-size:14px" href="#download">Download</a>
-  </div>
-</div></div></nav>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="app-g" x1="0" y1="0" x2="0" y2=".7"><stop offset="0" stop-color="#8E6CFF"/><stop offset="1" stop-color="#4C2FD6"/></linearGradient>
+  </defs>
+  <symbol id="i-app" viewBox="0 0 1024 1024">
+    <rect width="1024" height="1024" rx="230" fill="url(#app-g)"/>
+    <rect x="65" y="65" width="894" height="894" rx="225" fill="#FCFDFF" fill-opacity=".93"/>
+    <g transform="translate(272 272)"><path d="M26 150V66a40 40 0 0 1 40-40h84M330 26h84a40 40 0 0 1 40 40v84M26 330v84a40 40 0 0 0 40 40h84M330 454h84a40 40 0 0 0 40-40v-84" fill="none" stroke="#5B3DF5" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><circle cx="240" cy="196" r="58" fill="#5B3DF5"/><path d="M128 388c0-58 50-102 112-102s112 44 112 102z" fill="#5B3DF5"/></g>
+  </symbol>
+  <symbol id="i-face" viewBox="0 0 181 174">
+    <g fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M50 118c16.7 21.4 67.1 21.4 84.3 0M96.8 47 80.8 95.2h16M52.7 47v21.7M131.6 47v21.7"/><path d="M6 134v6.2C6 155.6 18.4 168 30.7 168H40M175 134v6.2c0 15.4-12.4 27.8-24.7 27.8H141M6 40v-6.2C6 18.4 18.4 6 30.7 6H40M175 40v-6.2C175 18.4 162.6 6 150.3 6H141"/></g>
+  </symbol>
+  <symbol id="i-wifi" viewBox="0 0 20 15"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1.6 5.3a12 12 0 0 1 16.8 0M4.7 8.5a7.6 7.6 0 0 1 10.6 0"/></g><path d="M7.4 11.3a3.6 3.6 0 0 1 5.2 0L10 14z" fill="currentColor"/></symbol>
+  <symbol id="i-batt" viewBox="0 0 30 14"><rect x=".75" y=".75" width="25" height="12.5" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5"/><rect x="3" y="3" width="17" height="8" rx="1.8" fill="currentColor"/><path d="M27.6 4.8a2.2 2.2 0 0 1 0 4.4z" fill="currentColor" fill-opacity=".5"/></symbol>
+  <symbol id="i-person" viewBox="0 0 64 64"><circle cx="32" cy="25" r="11" fill="currentColor"/><path d="M11 58c2-12 11-18 21-18s19 6 21 18z" fill="currentColor"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 12 12"><path d="M3 1.5v9M9 1.5v9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 12 12"><path d="M3 1.4v9.2L10.6 6z" fill="currentColor"/></symbol>
+</svg>
 
-<header><div class="wrap">
-  <div class="pill"><span class="dot"></span> 1 day free · runs on your Mac</div>
-  <h1>Unlock your Mac<br>with a look.</h1>
-  <p class="sub">Mac ID recognises your face the moment your lock screen appears. No typing, no reaching for a key. Your face is processed on-device and never leaves your Mac.</p>
-  <div class="cta">
-    <a class="btn btn-primary" href="#download">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16"/></svg>
-      Download for Mac
-    </a>
-    <a class="btn btn-ghost" href="#pricing">Buy a licence · $4.99</a>
-  </div>
-  <p class="meta">Free for a day, then $4.99 once · macOS 15 or later · Apple silicon</p>
+<a class="skip" href="#main">Skip to content</a>
 
-  <div class="stage glass">
-    <div class="mac">
-      <div class="notch"><div class="scan"></div><span class="notchtext">Looking for you…</span></div>
-      <div class="face">
-        <div class="ring"></div>
-        <svg viewBox="0 0 480 480" aria-hidden="true">
-          <g stroke="#8E72FF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" fill="none">
-            <path d="M60 170 V112 A52 52 0 0 1 112 60 H170"/>
-            <path d="M310 60 H368 A52 52 0 0 1 420 112 V170"/>
-            <path d="M60 310 V368 A52 52 0 0 0 112 420 H170"/>
-            <path d="M310 420 H368 A52 52 0 0 0 420 368 V310"/>
-          </g>
-          <circle cx="240" cy="205" r="52" fill="#8E72FF"/>
-          <path d="M160 330 C160 285 196 250 240 250 C284 250 320 285 320 330 Z" fill="#8E72FF"/>
-        </svg>
+<header class="top">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="brand" href="#top" aria-label="Mac ID home"><svg viewBox="0 0 1024 1024" aria-hidden="true"><use href="#i-app"/></svg>Mac&nbsp;ID</a>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+    </div>
+    <a class="btn btn-primary btn-sm" href="#download">Download</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<!-- ======================================================================= hero -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap">
+    <div class="grid hero-grid">
+      <h1 id="hero-title" class="h1">Unlock your Mac with a look.</h1>
+      <div class="hero-side">
+        <p class="lede">Mac ID recognises your face when the lock screen appears and unlocks your Mac — no typing, no reaching for a key. Your face is processed on the Mac and never leaves it.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#download"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-down"/></svg>Download for Mac</a>
+          <a class="btn btn-secondary" href="#pricing">Buy a licence · $4.99</a>
+        </div>
+        <p class="meta">Free for a day, then $4.99 once · macOS 15 or later · Apple silicon</p>
+      </div>
+    </div>
+
+    <div class="demo">
+      <div class="mac" data-mock="hero" role="img" aria-label="A MacBook lock screen. Mac ID's panel opens under the notch, scans, shows a check, types the password and the Mac opens to the desktop, then locks again.">
+        <div class="mac-lid" aria-hidden="true">
+          <div class="mac-screen">
+            <img class="m-wall" src="assets/wallpaper.webp" width="1600" height="1040" alt="" decoding="async" fetchpriority="high">
+            <div class="m-dim"></div>
+            <div class="m-lock">
+              <div class="m-status"><svg viewBox="0 0 20 15"><use href="#i-wifi"/></svg><svg viewBox="0 0 30 14"><use href="#i-batt"/></svg></div>
+              <div class="m-clock"><span class="m-date">Thursday 24 September</span><span class="m-time">10:24</span></div>
+              <div class="m-user">
+                <div class="m-avatar"><svg viewBox="0 0 64 64"><use href="#i-person"/></svg></div>
+                <div class="m-field"><span class="m-ph">Enter Password</span><span class="m-dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              </div>
+            </div>
+            <div class="m-desk">
+              <div class="m-menubar">
+                <div class="m-menus"><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span></div>
+                <div class="m-extras"><svg class="m-face" viewBox="0 0 181 174"><use href="#i-face"/></svg><svg viewBox="0 0 30 14"><use href="#i-batt"/></svg><svg viewBox="0 0 20 15"><use href="#i-wifi"/></svg><span class="m-mclock">Thu 24 Sep 10:24</span></div>
+              </div>
+              <div class="m-dock"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="m-notch"></div>
+            <div class="m-island">
+              <i class="m-flare l"></i><i class="m-flare r"></i>
+              <div class="m-island-body"><div class="m-scan"><img class="m-still" src="assets/scan-check.webp" width="256" height="256" alt=""><canvas width="256" height="256"></canvas></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="mac-base" aria-hidden="true"></div>
+      </div>
+      <div class="demo-bar">
+        <p class="ticker" data-tone="ok" aria-hidden="true"><i></i><span>Recognised · typing your password</span></p>
+        <span class="demo-note">Notch animation from the app</span>
+        <button class="demo-toggle" type="button" aria-label="Pause the animation"><svg viewBox="0 0 12 12" aria-hidden="true"><use href="#i-pause"/></svg><span>Pause</span></button>
       </div>
     </div>
   </div>
-</div></header>
+</section>
 
-<section id="features"><div class="wrap">
-  <div class="eyebrow">What you get</div>
-  <h2>Fast, private, and honest about its limits.</h2>
-  <p class="lede">Built on Apple's Vision and Core ML frameworks, with a face-recognition model that runs on the Neural Engine in under ten milliseconds.</p>
-  <div class="grid">
-    <div class="card glass">
-      <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M8 12h8M12 8v8"/></svg></div>
-      <h3>Nothing leaves your Mac</h3>
-      <p>Camera frames are processed in memory and never written to disk. Your face data and your password never touch a network — there is no server to talk to.</p>
+<!-- ======================================================================= how it works (scroll sequence) -->
+<section id="how" class="seq rule" aria-labelledby="how-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="label">How it works</p>
+      <h2 id="how-title" class="h2">From lock screen to desktop, without typing.</h2>
     </div>
-    <div class="card glass">
-      <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 12l5 5L21 4"/></svg></div>
-      <h3>Recognises you, not a lookalike</h3>
-      <p>A ResNet-100 face model measured at 100% recognition on both clean and partially covered faces, with zero false accepts across 54,978 impostor comparisons.</p>
-    </div>
-    <div class="card glass">
-      <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></div>
-      <h3>Rejects printed photos</h3>
-      <p>A printed photo held to the camera makes a moiré pattern that skin does not. Mac ID looks for it, alongside screen glare and device edges, and refuses to unlock.</p>
-    </div>
-    <div class="card glass">
-      <div class="ico"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></div>
-      <h3>Ready before you are</h3>
-      <p>The camera starts warming the instant your Mac locks, so recognition begins as the notch finishes opening rather than after it.</p>
-    </div>
-    <div class="card glass">
-      <div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-      <h3>Glasses, light, angle</h3>
-      <p>Enrolment captures nine head positions, and matching accepts whichever of them you actually resemble — so a different expression or a change of light doesn't lock you out.</p>
-    </div>
-    <div class="card glass">
-      <div class="ico"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 118 0v3"/></svg></div>
-      <h3>Touch ID guards the key</h3>
-      <p>Your password is encrypted with a key that only your fingerprint can unwrap. It is asked for once per launch, never at the lock screen.</p>
+
+    <div class="seq-body">
+      <div class="seq-stage">
+        <div class="seq-view">
+          <i class="seq-fade l" aria-hidden="true"></i><i class="seq-fade r" aria-hidden="true"></i>
+          <div class="mac" data-mock="seq" role="img" aria-label="Close-up of the same unlock: the scan completes with a check, the password field fills in, and the lock screen opens to the desktop.">
+            <div class="mac-lid" aria-hidden="true">
+              <div class="mac-screen">
+                <img class="m-wall" src="assets/wallpaper.webp" width="1600" height="1040" alt="" decoding="async">
+                <div class="m-dim"></div>
+                <div class="m-lock">
+                  <div class="m-status"><svg viewBox="0 0 20 15"><use href="#i-wifi"/></svg><svg viewBox="0 0 30 14"><use href="#i-batt"/></svg></div>
+                  <div class="m-clock"><span class="m-date">Thursday 24 September</span><span class="m-time">10:24</span></div>
+                  <div class="m-user">
+                    <div class="m-avatar"><svg viewBox="0 0 64 64"><use href="#i-person"/></svg></div>
+                    <div class="m-field"><span class="m-ph">Enter Password</span><span class="m-dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+                  </div>
+                </div>
+                <div class="m-desk">
+                  <div class="m-menubar">
+                    <div class="m-menus"><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span></div>
+                    <div class="m-extras"><svg class="m-face" viewBox="0 0 181 174"><use href="#i-face"/></svg><svg viewBox="0 0 30 14"><use href="#i-batt"/></svg><svg viewBox="0 0 20 15"><use href="#i-wifi"/></svg><span class="m-mclock">Thu 24 Sep 10:24</span></div>
+                  </div>
+                  <div class="m-dock"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+                <div class="m-notch"></div>
+                <div class="m-island">
+                  <i class="m-flare l"></i><i class="m-flare r"></i>
+                  <div class="m-island-body"><div class="m-scan"><img class="m-still" src="assets/scan-check.webp" width="256" height="256" alt=""><canvas width="256" height="256"></canvas></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="mac-base" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+
+      <ol class="seq-steps">
+        <li class="seq-step"><div class="seq-copy">
+          <p class="seq-num"><b>01</b>Lock screen</p>
+          <h3>Your Mac locks. The notch opens.</h3>
+          <p>When the lock screen appears, Mac ID opens a small panel under the notch and starts looking for you.</p>
+        </div></li>
+        <li class="seq-step"><div class="seq-copy">
+          <p class="seq-num"><b>02</b>Recognition</p>
+          <h3>It recognises you, on the Mac.</h3>
+          <p>An ArcFace model running on the Apple Neural Engine matches your face. Typical recognition takes under a second — real logs show 70–900&nbsp;ms. A liveness check turns away a printed photo or a photo on a phone screen.</p>
+        </div></li>
+        <li class="seq-step"><div class="seq-copy">
+          <p class="seq-num"><b>03</b>Password</p>
+          <h3>It types your password for you.</h3>
+          <p>macOS gives apps no way to approve a login, so Mac ID enters your password. It is stored AES-256-encrypted, and the key is released only by Touch ID or your Mac password.</p>
+        </div></li>
+        <li class="seq-step"><div class="seq-copy">
+          <p class="seq-num"><b>04</b>Desktop</p>
+          <h3>You’re in.</h3>
+          <p>If it doesn’t recognise you, nothing happens — the lock screen waits, and you type your password as usual.</p>
+        </div></li>
+      </ol>
     </div>
   </div>
-</div></section>
+</section>
 
-<section id="how"><div class="wrap">
-  <div class="eyebrow">How it works</div>
-  <h2>Four steps, about two minutes.</h2>
-  <div class="steps">
-    <div class="step glass"><div><h4>Install and grant access</h4><p>Drag Mac ID to Applications. It asks for the camera, and for Accessibility so it can type your password at the lock screen.</p></div></div>
-    <div class="step glass"><div><h4>Enrol your face</h4><p>Follow the ring: look straight ahead, then turn slightly in each direction. Mac ID stores a mathematical description of your face — not a photograph.</p></div></div>
-    <div class="step glass"><div><h4>Paste your licence</h4><p>Settings → About → paste the key from your purchase email, and press Activate.</p></div></div>
-    <div class="step glass"><div><h4>Lock your Mac</h4><p>The notch opens, finds you, and types your password. If it doesn't recognise you, nothing happens and you type it yourself.</p></div></div>
+<!-- ======================================================================= features -->
+<section id="features" class="section rule" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="label">Features</p>
+      <h2 id="features-title" class="h2">Quick, private, and plain about how it works.</h2>
+    </div>
+    <div class="grid feat">
+      <div class="figure">
+        <p class="figure-num"><span>70–900</span><small>ms</small></p>
+        <p class="figure-cap">Recognition times from real logs. Typical recognition takes under a second.</p>
+        <div class="range" aria-hidden="true">
+          <div class="range-track"><span class="range-fill"></span></div>
+          <div class="range-ticks"><span>0</span><span>250</span><span>500</span><span>750</span><span>1 s</span></div>
+        </div>
+      </div>
+      <dl class="spec">
+        <div class="spec-row">
+          <dt>Recognition stays on your Mac</dt>
+          <dd class="datum">ArcFace · Neural Engine</dd>
+          <dd class="desc">Your face is matched by an ArcFace model running on the Apple Neural Engine, entirely on the Mac. Your face never leaves it.</dd>
+        </div>
+        <div class="spec-row">
+          <dt>Refuses photos</dt>
+          <dd class="datum">Liveness check</dd>
+          <dd class="desc">A liveness check rejects a printed photo and a photo shown on a phone screen. It does not reliably reject a video — <a class="link" href="#limits">see the limits</a>.</dd>
+        </div>
+        <div class="spec-row">
+          <dt>Your password stays encrypted</dt>
+          <dd class="datum">AES-256 · Touch ID</dd>
+          <dd class="desc">Mac ID unlocks by typing your macOS password. The password is stored AES-256-encrypted, and the key to it is released only by Touch ID or your Mac password.</dd>
+        </div>
+        <div class="spec-row">
+          <dt>Lives in the menu bar</dt>
+          <dd class="datum">Menu bar · notch</dd>
+          <dd class="desc">At the lock screen all you see is a small panel under the notch: it looks for you, shows a check, and gets out of the way.</dd>
+        </div>
+        <div class="spec-row">
+          <dt>One payment, then offline</dt>
+          <dd class="datum">$4.99 · one Mac</dd>
+          <dd class="desc">A licence activates once for one Mac, then works offline. No subscription, no account.</dd>
+        </div>
+        <div class="spec-row">
+          <dt>Signed and notarized by Apple</dt>
+          <dd class="datum">macOS 15+ · Apple silicon</dd>
+          <dd class="desc">For Macs with Apple silicon running macOS 15 Sequoia or later.</dd>
+        </div>
+      </dl>
+    </div>
   </div>
-</div></section>
+</section>
 
-<section id="pricing"><div class="wrap">
-  <div class="eyebrow">Pricing</div>
-  <h2>Try it free. Then one price, forever.</h2>
-  <p class="lede">Every download gets a full day of everything, with no payment details and no account. If it works for you, a single payment buys a licence that never expires. It checks in once when you activate it, then works offline.</p>
-  <div class="price-wrap"><div class="price glass">
-    <div class="amount">$4.99<span> once</span></div>
-    <ul class="plist">
-      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>1-day free trial, no card required</span></li>
-      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>A licence key for your Mac, activated once</span></li>
-      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Never expires, no subscription</span></li>
-      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Activates once, then works with no internet</span></li>
-      <li><svg class="check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>Free updates, delivered in the app</span></li>
-    </ul>
-    <a class="btn btn-primary" style="width:100%" href="#" id="buy">Buy a licence</a>
-    <p class="meta" style="margin-top:13px">Checkout is handled securely by Lemon Squeezy. Your key appears on this page the moment you’ve paid.</p>
-  </div></div>
-</div></section>
-
-<section id="download"><div class="wrap">
-  <div class="eyebrow">Download</div>
-  <h2>Get Mac ID.</h2>
-  <p class="lede">Install it and everything works for a day. Enter a licence key any time before or after the trial ends.</p>
-  <div class="cta" style="justify-content:flex-start">
-    <a class="btn btn-primary" id="dmg" href="https://github.com/sammystech/Mac-ID/releases/latest/download/Mac-ID.dmg">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16"/></svg>
-      Download Mac ID
-    </a>
-    <a class="btn btn-ghost" href="https://github.com/sammystech/Mac-ID/releases">Release notes</a>
+<!-- ======================================================================= setup -->
+<section id="setup" class="section rule" aria-labelledby="setup-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="label">Setup</p>
+      <h2 id="setup-title" class="h2">Set up in four steps.</h2>
+    </div>
+    <ol class="grid setup">
+      <li><span class="setup-n" aria-hidden="true">1</span><h3>Install and grant access</h3><p>Drag Mac ID to Applications. It asks for the camera, and for Accessibility so it can type your password at the lock screen.</p></li>
+      <li><span class="setup-n" aria-hidden="true">2</span><h3>Enrol your face</h3><p>Follow the ring: look straight ahead, then turn slightly in each direction. Mac ID stores a mathematical description of your face — not a photograph.</p></li>
+      <li><span class="setup-n" aria-hidden="true">3</span><h3>Paste your licence</h3><p><span class="ui">Settings → About</span> → paste the key from your purchase email, and press Activate. During the 1-day trial you can skip this.</p></li>
+      <li><span class="setup-n" aria-hidden="true">4</span><h3>Lock your Mac</h3><p>The notch opens, finds you, and types your password. If it doesn’t recognise you, nothing happens and you type it yourself.</p></li>
+    </ol>
   </div>
-  <p class="meta" style="margin-bottom:34px">Signed and notarized by Apple · Apple silicon · macOS 15 Sequoia or later · 122&nbsp;MB</p>
+</section>
 
-  <div class="note glass">
-    <h3>Already using Mac ID?</h3>
-    <p>Version 1.9 moved to a new, Apple-verified signature, and copies from before it can&rsquo;t update to it on their own. Download it once from this page and drag it into Applications to replace the old one. Your licence and settings come across automatically. You&rsquo;ll set up your face and password again, and approve Camera and Accessibility once more, because macOS ties those to the app&rsquo;s signature.</p>
+<!-- ======================================================================= limits (honesty) -->
+<section id="limits" class="section limits" aria-labelledby="limits-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="label">Limits</p>
+      <h2 id="limits-title" class="h2">Worth knowing before you install.</h2>
+    </div>
+    <div class="grid limits-grid">
+      <div class="limits-text">
+        <p class="limits-statement">Mac ID is a convenience feature, not a security upgrade.</p>
+        <p>A MacBook camera sees a flat image, where an iPhone builds a 3D map of your face — so this cannot be as strong as Face ID or Touch ID. It reliably refuses a printed photo and a photo on a phone screen; it does not reliably refuse a video of you.</p>
+        <p>macOS gives no way for an app to authorise a login, so Mac ID unlocks by typing your stored password. That password is encrypted on your Mac behind Touch ID. If you are not comfortable with that trade, this is not the app for you.</p>
+      </div>
+      <div class="limits-side">
+        <figure class="glance">
+          <div class="glance-panel"><video muted playsinline preload="none" width="192" height="192" poster="assets/scan-fail-end.webp" aria-hidden="true"><source src="assets/scan-fail.mp4" type="video/mp4"></video></div>
+          <figcaption>A failed scan, as the app shows it. The Mac stays locked and waits for your password.</figcaption>
+        </figure>
+        <table class="facts">
+          <caption>At a glance</caption>
+          <tbody>
+            <tr><th scope="row">Printed photo held to the camera</th><td class="yes"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>Refused</td></tr>
+            <tr><th scope="row">Photo on a phone screen</th><td class="yes"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>Refused</td></tr>
+            <tr><th scope="row">A video of you</th><td class="no"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x"/></svg>Not reliably refused</td></tr>
+            <tr><th scope="row">Strength compared with Face ID or Touch ID</th><td class="no">Weaker</td></tr>
+            <tr><th scope="row">How it unlocks</th><td>Types your stored password</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
+</section>
 
-  <div class="note glass">
-    <h3>Worth knowing before you install</h3>
-    <p>Mac ID is a convenience feature, not a security upgrade. A MacBook camera sees a flat image, where an iPhone builds a 3D map of your face — so this cannot be as strong as Face ID or Touch ID. It reliably refuses a printed photo and a photo on a phone screen; it does not reliably refuse a video of you.</p>
-    <p>macOS gives no way for an app to authorise a login, so Mac ID unlocks by typing your stored password. That password is encrypted on your Mac behind Touch ID. If you are not comfortable with that trade, this is not the app for you.</p>
+<!-- ======================================================================= pricing -->
+<section id="pricing" class="section" aria-labelledby="pricing-title">
+  <div class="wrap">
+    <div class="grid price-grid">
+      <div class="price-copy">
+        <p class="label">Pricing</p>
+        <h2 id="pricing-title" class="h2">Try it free for a day. Then $4.99, once.</h2>
+        <p class="lede">Every download gets a full day of everything, with no payment details and no account. If it works for you, a single payment buys a licence that never expires. It checks in once when you activate it, then works offline.</p>
+      </div>
+      <div class="price-card">
+        <p class="price-amount">$4.99<span>once, for one Mac</span></p>
+        <ul class="price-list">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>1-day free trial, no card required</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>A licence key for one Mac, activated once</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Never expires, no subscription</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Activates once, then works with no internet</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Free updates, delivered in the app</span></li>
+        </ul>
+        <div class="terms">
+          <input type="checkbox" id="terms-agree" aria-describedby="terms-msg">
+          <label for="terms-agree">I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of Use</a></label>
+        </div>
+        <p id="terms-msg" class="terms-msg" aria-live="polite"></p>
+        <a class="btn btn-primary" href="#" id="buy">Buy a licence</a>
+        <p class="price-note">Checkout is handled securely by Lemon Squeezy. Your key appears on this page the moment you’ve paid.</p>
+      </div>
+    </div>
   </div>
-</div></section>
+</section>
 
-<footer><div class="wrap"><div class="foot">
-  <span>© 2026 Mac ID</span>
-  <a href="https://github.com/sammystech/Mac-ID">GitHub</a>
-  <a href="https://github.com/sammystech/Mac-ID/releases">Releases</a>
-  <a href="mailto:support@macid.net">support@macid.net</a>
-  <span class="sp">Built on open-source work — see Acknowledgements in the app.</span>
-</div></div></footer>
+<!-- ======================================================================= download -->
+<section id="download" class="section rule" aria-labelledby="download-title">
+  <div class="wrap">
+    <div class="dl-head">
+      <div>
+        <p class="label">Download</p>
+        <h2 id="download-title" class="h2">Get Mac ID.</h2>
+        <p class="lede">Install it and everything works for a day. Enter a licence key any time before or after the trial ends.</p>
+      </div>
+      <div class="dl-side">
+        <div class="cta">
+          <a class="btn btn-primary" id="dmg" href="https://github.com/sammystech/Mac-ID/releases/latest/download/Mac-ID.dmg"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-down"/></svg>Download Mac ID</a>
+          <a class="btn btn-secondary" href="https://github.com/sammystech/Mac-ID/releases">Release notes</a>
+        </div>
+        <p class="dl-meta">Signed and notarized by Apple · Apple silicon · macOS 15 Sequoia or later · 122&nbsp;MB</p>
+        <p class="dl-meta">By downloading you agree to the <a class="link" href="/terms.html">Terms of Use</a>.</p>
+        <p class="dl-meta">Before you install, <a class="link" href="#limits">read the limits</a>.</p>
+      </div>
+    </div>
+
+    <div class="grid upgrade">
+      <h3>Already using Mac ID?</h3>
+      <p>Version 1.9 moved to a new, Apple-verified signature, and copies from before it can&rsquo;t update to it on their own. Download it once from this page and drag it into Applications to replace the old one. Your licence and settings come across automatically. You&rsquo;ll set up your face and password again, and approve Camera and Accessibility once more, because macOS ties those to the app&rsquo;s signature.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-row">
+      <a class="brand" href="#top"><svg viewBox="0 0 1024 1024" aria-hidden="true"><use href="#i-app"/></svg>Mac&nbsp;ID</a>
+      <a href="https://github.com/sammystech/Mac-ID">GitHub</a>
+      <a href="https://github.com/sammystech/Mac-ID/releases">Releases</a>
+      <a href="mailto:support@macid.net">support@macid.net</a>
+      <a href="/terms.html">Terms</a>
+    </div>
+    <div class="foot-credit">
+      <span>Built on open-source work — see Acknowledgements in the app.</span>
+      <span>© 2026 Mac ID</span>
+    </div>
+  </div>
+</footer>
 
 
 <div id="claim" class="claim" hidden>
-  <div class="claim-card glass" role="dialog" aria-modal="true" aria-labelledby="claim-title">
+  <div class="claim-card" role="dialog" aria-modal="true" aria-labelledby="claim-title">
     <button class="claim-x" type="button" aria-label="Close">&times;</button>
     <div id="claim-body"></div>
   </div>
 </div>
+
+<script>
+/* Page motion: the demo loop at the top and the scroll-driven unlock in "How it works".
+   No libraries. Both Macs are plain DOM; this only writes transform, opacity, clip-path and one
+   canvas frame at a time, and every part of it may fail safely — the markup already shows a
+   sensible still (panel open, check, password typed). */
+(function () {
+  'use strict';
+  if (!document.querySelector || !window.requestAnimationFrame) return;
+
+  var reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  function reduced() { return !!(reduceMQ && reduceMQ.matches); }
+
+  // unlockanimation.mp4 (432 px, 60 fps) → 67 meaningful frames at 256 px, 9 per row.
+  var SHEET = 'assets/scan-unlock.webp', FACE = 'assets/scan-face.webp', CHECK = 'assets/scan-check.webp';
+  var COLS = 9, CELL = 256, LAST = 66;
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function ramp(v, a, b) { return clamp((v - a) / (b - a), 0, 1); }
+  function smooth(t) { return t * t * (3 - 2 * t); }
+  function easeOut(t) { return 1 - (1 - t) * (1 - t) * (1 - t); }
+  function easeInOut(t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function r2(n) { return Math.round(n * 100) / 100; }
+  function r3(n) { return Math.round(n * 1000) / 1000; }
+  // SwiftUI .spring(response:dampingFraction:) as a function of time. The panel uses open 0.45/0.7
+  // and close 0.45/1.0 (NotchGeometry.swift), so the web version moves the way the app does.
+  function spring(t, response, zeta) {
+    if (t <= 0) return 0;
+    var w = 2 * Math.PI / response;
+    if (zeta >= 1) return 1 - Math.exp(-w * t) * (1 + w * t);
+    var wd = w * Math.sqrt(1 - zeta * zeta);
+    return 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + zeta * w / wd * Math.sin(wd * t));
+  }
+  // Style writes only when a value actually changes.
+  function css(el, prop, val) {
+    var c = el._c || (el._c = {});
+    if (c[prop] !== val) { c[prop] = val; el.style[prop] = val; }
+  }
+
+  /* ------------------------------------------------------------ frame sheet (one decode, shared) */
+  var sheet = null, sheetState = 'idle', onSheet = [];
+  function loadSheet() {
+    if (sheetState !== 'idle') return;
+    sheetState = 'loading';
+    function done(img) { sheet = img; sheetState = img ? 'ready' : 'failed'; onSheet.forEach(function (f) { f(); }); }
+    function viaImage() {
+      var im = new Image();
+      im.onload = function () { if (im.decode) im.decode().then(function () { done(im); }, function () { done(im); }); else done(im); };
+      im.onerror = function () { done(null); };
+      im.src = SHEET;
+    }
+    if (window.fetch && window.createImageBitmap) {
+      fetch(SHEET).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
+        .then(function (b) { return createImageBitmap(b); })   // decodes off the main thread
+        .then(done, viaImage);
+    } else viaImage();
+  }
+
+  /* ------------------------------------------------------------ one Mac mock-up */
+  function Mock(el) {
+    function q(s) { return el.querySelector(s); }
+    this.el = el; this.screen = q('.mac-screen');
+    this.body = q('.m-island-body'); this.fl = q('.m-flare.l'); this.fr = q('.m-flare.r');
+    this.scan = q('.m-scan'); this.still = q('.m-still'); this.canvas = q('.m-scan canvas');
+    this.ctx = this.canvas && this.canvas.getContext ? this.canvas.getContext('2d') : null;
+    this.wall = q('.m-wall'); this.dim = q('.m-dim'); this.lock = q('.m-lock');
+    this.desk = q('.m-desk'); this.bar = q('.m-menubar'); this.dock = q('.m-dock'); this.ph = q('.m-ph');
+    this.dots = Array.prototype.slice.call(el.querySelectorAll('.m-dots i'));
+    this.zoomMax = 1; this.drawn = -1; this.pt = 1; this.state = null; this.flat = false; this.live = false;
+    this.measure();
+  }
+  Mock.prototype.measure = function () {
+    this.pt = (this.screen.clientWidth || 1470) / 1470;
+    if (this.ctx) {
+      var dpr = Math.min(window.devicePixelRatio || 1, 3);
+      var px = clamp(Math.round(140 * this.pt * dpr * this.zoomMax), 32, CELL);
+      if (this.canvas.width !== px) { this.canvas.width = px; this.canvas.height = px; this.drawn = -1; }
+    }
+    this.el.classList.toggle('is-flat', this.flat);
+    if (this.state) this.render(this.state);
+  };
+  // s = { island, content, pulse, frame, typed, open } — all 0..1 except frame (0..LAST).
+  Mock.prototype.render = function (s) {
+    this.state = s;
+    var pt = this.pt, flat = this.flat;
+
+    // The panel grows out of the notch: 196x32 → 220x200 pt, bottom radius 10 → 60, top flare 8 → 16.
+    var i = s.island, w = 196 + 24 * i, h = 32 + 168 * i, r = r2((10 + 50 * clamp(i, 0, 1)) * pt);
+    var clip = 'inset(0px ' + r2((224 - w) / 2 * pt) + 'px ' + r2((210 - h) * pt) + 'px round 0px 0px ' + r + 'px ' + r + 'px)';
+    css(this.body, 'clipPath', clip); css(this.body, 'webkitClipPath', clip);
+    var fs = r3((8 + 8 * clamp(i, 0, 1.2)) / 16);
+    css(this.fl, 'transform', 'translateX(' + r2(-w / 2 * pt) + 'px) scale(' + fs + ')');
+    css(this.fr, 'transform', 'translateX(' + r2(w / 2 * pt) + 'px) scale(' + fs + ')');
+
+    // Content resolves in with the panel (the app: scale 0.3 → 1, blur, fade) and "breathes" while scanning.
+    var c = clamp(s.content, 0, 1), p = s.pulse || 0;
+    css(this.scan, 'opacity', String(r3(c * (1 - .35 * p))));
+    css(this.scan, 'transform', c >= 1 && !p ? 'none' : 'scale(' + r3((.3 + .7 * c) * (1 - .03 * p)) + ')');
+    css(this.scan, 'filter', flat || c > .985 ? 'none' : 'blur(' + r2((1 - c) * 10 * pt) + 'px)');
+
+    var n = clamp(Math.round(s.frame), 0, LAST);
+    if (sheet && this.ctx) {
+      if (n !== this.drawn) {
+        var W = this.canvas.width;
+        this.ctx.imageSmoothingQuality = 'high';
+        this.ctx.drawImage(sheet, (n % COLS) * CELL, Math.floor(n / COLS) * CELL, CELL, CELL, 0, 0, W, W);
+        this.drawn = n;
+        if (!this.live) { this.live = true; css(this.still, 'visibility', 'hidden'); }
+      }
+    } else if (this.still) {
+      var src = n >= 40 ? CHECK : FACE;
+      if (this.still.getAttribute('src') !== src) this.still.setAttribute('src', src);
+    }
+
+    var k = Math.ceil(clamp(s.typed, 0, 1) * this.dots.length - 1e-6);
+    for (var j = 0; j < this.dots.length; j++) css(this.dots[j], 'opacity', j < k ? '1' : '0');
+    css(this.ph, 'opacity', k ? '0' : '1');
+
+    // Lock screen → desktop.
+    var e = clamp(s.open, 0, 1), eo = easeOut(e), d = easeOut(ramp(e, .25, 1));
+    css(this.lock, 'opacity', String(r3(1 - smooth(ramp(e, 0, .6)))));
+    css(this.dim, 'opacity', String(r3(1 - e)));
+    css(this.desk, 'opacity', String(r3(smooth(ramp(e, .3, 1)))));
+    css(this.lock, 'transform', flat || !eo ? 'none' : 'scale(' + r3(1 + .06 * eo) + ')');
+    css(this.wall, 'transform', flat ? 'none' : 'scale(' + r3(1.045 - .045 * eo) + ')');
+    css(this.bar, 'transform', flat ? 'none' : 'translateY(' + r2(-(1 - d) * 100) + '%)');
+    css(this.dock, 'transform', 'translateX(-50%) translateY(' + (flat ? 0 : r2((1 - d) * 120)) + '%)');
+  };
+
+  /* ------------------------------------------------------------ the demo loop at the top */
+  var LOOP = 9.4, HERO_START = 3.96;   // starts on the check with the password typed (= the static markup)
+  function heroState(t) {
+    var open = t >= .7 ? spring(t - .7, .45, .7) : 0;
+    var shut = t >= 4.1 ? spring(t - 4.1, .45, 1) : 0;
+    var island = open * (1 - shut), relock = t >= 8.2;
+    return {
+      island: island,
+      content: clamp(island, 0, 1),
+      pulse: t > 1.25 && t < 2.15 ? .5 - .5 * Math.cos(2 * Math.PI * (t - 1.25) / .9) : 0,
+      frame: t < 2.2 ? 0 : (t - 2.2) * 60,
+      typed: relock ? 0 : ramp(t, 3.45, 3.95),
+      open: relock ? 1 - ramp(t, 8.2, 8.8) : ramp(t, 4.35, 5.25)
+    };
+  }
+  function heroCaption(t) {
+    if (t < .7 || t >= 8.2) return ['Locked', 'idle'];
+    if (t < 3.3) return ['Looking for you…', 'scan'];
+    if (t < 4.35) return ['Recognised · typing your password', 'ok'];
+    return ['Unlocked', 'ok'];
+  }
+
+  function Hero(mock, root) {
+    var self = this;
+    this.m = mock; this.t = HERO_START; this.last = 0; this.raf = 0; this.cap = '';
+    this.onScreen = true; this.paused = reduced();
+    this.btn = root.querySelector('.demo-toggle');
+    this.tk = root.querySelector('.ticker'); this.tkText = this.tk && this.tk.querySelector('span');
+    this.step = function (ts) { self.frame(ts); };
+    mock.render(heroState(this.t)); this.caption();
+    if (this.btn) {
+      this.btn.style.visibility = 'visible';
+      this.btn.addEventListener('click', function () { self.paused = !self.paused; self.sync(); });
+    }
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) { self.onScreen = es[es.length - 1].isIntersecting; self.sync(); }).observe(mock.el);
+    }
+    document.addEventListener('visibilitychange', function () { self.sync(); });
+    this.sync();
+  }
+  Hero.prototype.sync = function () {
+    var run = !this.paused && this.onScreen && !document.hidden;
+    if (this.btn) {
+      this.btn.setAttribute('aria-label', this.paused ? 'Play the animation' : 'Pause the animation');
+      this.btn.querySelector('use').setAttribute('href', this.paused ? '#i-play' : '#i-pause');
+      this.btn.querySelector('span').textContent = this.paused ? 'Play' : 'Pause';
+    }
+    if (run && !this.raf) { this.last = 0; this.raf = requestAnimationFrame(this.step); }
+    else if (!run && this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
+  };
+  Hero.prototype.caption = function () {
+    if (!this.tk) return;
+    var c = heroCaption(this.t);
+    if (c[0] === this.cap) return;
+    this.cap = c[0]; this.tkText.textContent = c[0]; this.tk.setAttribute('data-tone', c[1]);
+  };
+  Hero.prototype.frame = function (ts) {
+    this.raf = 0;
+    var dt = this.last ? Math.min((ts - this.last) / 1000, .25) : 0;   // real time, even when rAF is throttled
+    this.last = ts;
+    var t = this.t + dt;
+    // Never start a scan before the frames exist: wait on the desktop while they load.
+    if ((sheetState === 'idle' || sheetState === 'loading') && this.t <= 8 && t > 8) t = 8;
+    if (t >= LOOP) t -= LOOP;
+    this.t = t;
+    this.m.render(heroState(t));
+    this.caption();
+    this.raf = requestAnimationFrame(this.step);
+  };
+
+  /* ------------------------------------------------------------ the scroll-driven unlock */
+  // Scroll position is mapped to a "story" value s: s = 0, 1, 2, 3 exactly when step 1..4's text sits
+  // on the reading line, linear in between. Choreography is written in s, so it stays tied to the
+  // copy at any viewport size. The stage pins with position: sticky — no scroll hijacking.
+  var PRESETS = [   // reduced motion: one still per step, crossfaded
+    { island: 1, content: 1, pulse: 0, frame: 0, typed: 0, open: 0 },
+    { island: 1, content: 1, pulse: 0, frame: LAST, typed: 0, open: 0 },
+    { island: 1, content: 1, pulse: 0, frame: LAST, typed: 1, open: 0 },
+    { island: 0, content: 0, pulse: 0, frame: LAST, typed: 1, open: 1 }
+  ];
+  function Seq(section, mock) {
+    var self = this;
+    this.sec = section; this.m = mock;
+    this.stage = section.querySelector('.seq-stage'); this.view = section.querySelector('.seq-view');
+    this.fades = Array.prototype.slice.call(section.querySelectorAll('.seq-fade'));
+    this.steps = Array.prototype.slice.call(section.querySelectorAll('.seq-step'));
+    this.copies = this.steps.map(function (li) { return li.querySelector('.seq-copy'); });
+    this.nav = document.querySelector('.top');
+    this.A = [0, 1, 2, 3]; this.cur = null; this.active = -1; this.preK = -1;
+    this.raf = 0; this.last = 0; this.visible = false;
+    this.tick = function (ts) { self.frame(ts); };
+    this.kick = function () { if (self.visible && !self.raf) self.raf = requestAnimationFrame(self.tick); };
+    section.classList.add('is-live');
+    this.measure();
+    window.addEventListener('scroll', this.kick, { passive: true });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) {
+        self.visible = es[es.length - 1].isIntersecting;
+        if (self.visible) self.kick();
+      }, { rootMargin: '25% 0px' }).observe(section);
+    } else { this.visible = true; this.kick(); }
+  }
+  Seq.prototype.measure = function () {
+    var stacked = window.matchMedia('(max-width: 899px)').matches;
+    var vh = document.documentElement.clientHeight, sy = window.pageYOffset;
+    var navH = this.nav ? this.nav.offsetHeight : 0, stageH = this.stage.offsetHeight;
+    var line = stacked ? navH + stageH + (vh - navH - stageH) / 2 : navH + (vh - navH) / 2;
+    this.A = this.copies.map(function (c) { var r = c.getBoundingClientRect(); return r.top + sy + r.height / 2 - line; });
+    for (var k = 1; k < this.A.length; k++) if (this.A[k] <= this.A[k - 1]) this.A[k] = this.A[k - 1] + 1;
+
+    this.m.flat = reduced();
+    this.m.zoomMax = this.m.flat ? 1 : stacked ? 2.5 : 1.8;   // push-in on the notch
+    this.zField = this.m.flat ? 1 : stacked ? 2.1 : 1.55;     // then on the password field
+    css(this.m.el, 'transform', 'none');
+    this.m.measure();
+    var mr = this.m.el.getBoundingClientRect(), sr = this.m.screen.getBoundingClientRect(), vr = this.view.getBoundingClientRect();
+    this.o = { x: mr.left - vr.left, y: mr.top - vr.top };                          // Mac's layout origin in the view
+    this.p = { x: sr.left - mr.left + sr.width / 2, y: sr.top - mr.top + 98 * this.m.pt };  // the scan, in Mac coords
+    this.q = { x: this.p.x, y: sr.top - mr.top + 849 * this.m.pt };                     // the password field
+    this.c = { x: vr.width / 2, y: vr.height / 2 };                                  // where the camera brings it
+    this.cur = null; this.preK = -1; this.last = 0;
+    if (this.visible) { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; this.kick(); }
+  };
+  Seq.prototype.sAt = function (y) {
+    var A = this.A, n = A.length;
+    if (y <= A[0]) return (y - A[0]) / (A[1] - A[0]);
+    for (var k = 0; k < n - 1; k++) if (y < A[k + 1]) return k + (y - A[k]) / (A[k + 1] - A[k]);
+    return n - 1 + (y - A[n - 1]) / (A[n - 1] - A[n - 2]);
+  };
+  Seq.prototype.frame = function (ts) {
+    this.raf = 0;
+    var target = clamp(this.sAt(window.pageYOffset), -1, 3.6);
+    var act = clamp(Math.round(target), 0, 3);
+    if (act !== this.active) {
+      if (this.active >= 0) this.steps[this.active].classList.remove('is-active');
+      this.steps[act].classList.add('is-active');
+      this.active = act;
+    }
+    if (this.m.flat) {
+      if (act !== this.preK) { this.preK = act; this.camera(1, 0, this.p); this.m.render(PRESETS[act]); }
+      return;
+    }
+    var dt = this.last ? Math.min((ts - this.last) / 1000, .05) : 1 / 60;
+    this.last = ts;
+    if (this.cur === null) this.cur = target;
+    // Frame-rate-independent exponential smoothing: the scrub trails the scroll by ~0.15 s, like weight.
+    this.cur += (target - this.cur) * (1 - Math.exp(-7.5 * dt));
+    if (Math.abs(target - this.cur) < .0005) this.cur = target;
+    this.apply(this.cur, ts / 1000);
+    var breathing = this.cur > -.05 && this.cur < .65;   // the idle scan pulses on the clock
+    if (this.visible && (this.cur !== target || breathing)) this.raf = requestAnimationFrame(this.tick);
+    else this.last = 0;
+  };
+  Seq.prototype.apply = function (s, time) {
+    var open = spring(ramp(s, -.45, .05) * .8, .45, .7);
+    var shut = spring(ramp(s, 2.12, 2.4) * .6, .45, 1);
+    var island = open * (1 - shut);
+    var breathe = ramp(s, .05, .25) * (1 - ramp(s, .5, .62));
+    this.m.render({
+      island: island,
+      content: clamp(island, 0, 1),
+      pulse: breathe * (.5 - .5 * Math.cos(2 * Math.PI * time / .9)),
+      frame: LAST * ramp(s, .6, 1.15),     // the real unlock animation, scrubbed: scan → check
+      typed: ramp(s, 1.72, 2.08),
+      open: ramp(s, 2.45, 3)
+    });
+    // Camera: push in on the notch for the scan, tilt down to the password field while it types,
+    // then pull back to the whole screen for the desktop.
+    var a = easeInOut(ramp(s, .05, .55)), b = easeInOut(ramp(s, 1.2, 1.65)), c = easeInOut(ramp(s, 2.12, 2.5));
+    var zA = this.m.zoomMax, zB = this.zField;
+    var z = 1 + (zA - 1) * a + (zB - zA) * b + (1 - zB) * c;
+    this.camera(z, a * (1 - c), { x: this.p.x, y: this.p.y + (this.q.y - this.p.y) * b });
+  };
+  // Scale z about focus point f (Mac coords); k = how far f has travelled to the centre of the view.
+  Seq.prototype.camera = function (z, k, f) {
+    if (z <= 1.0005) css(this.m.el, 'transform', 'none');
+    else {
+      var tx = f.x * (1 - z) + (this.c.x - this.o.x - f.x) * k;
+      var ty = f.y * (1 - z) + (this.c.y - this.o.y - f.y) * k;
+      css(this.m.el, 'transform', 'translate(' + r2(tx) + 'px,' + r2(ty) + 'px) scale(' + r3(z) + ')');
+    }
+    for (var j = 0; j < this.fades.length; j++) css(this.fades[j], 'opacity', String(r3(k)));
+  };
+
+  /* ------------------------------------------------------------ the failed-scan clip in Limits */
+  function failClip(v) {
+    var on = false, timer = 0;
+    function play() { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+    v.addEventListener('ended', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () { if (on) { v.currentTime = 0; play(); } }, 1400);   // hold on the failed state
+    });
+    new IntersectionObserver(function (es) {
+      on = es[es.length - 1].isIntersecting && !reduced();
+      if (on) { v.currentTime = 0; play(); } else { clearTimeout(timer); v.pause(); }
+    }, { threshold: .5 }).observe(v);
+  }
+
+  /* ------------------------------------------------------------ live clock on both lock screens */
+  function stampClocks() {
+    var D = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    var M = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    var d = new Date(), h = d.getHours() % 12 || 12, time = h + ':' + ('0' + d.getMinutes()).slice(-2);
+    var long = D[d.getDay()] + ' ' + d.getDate() + ' ' + M[d.getMonth()];
+    var short = D[d.getDay()].slice(0, 3) + ' ' + d.getDate() + ' ' + M[d.getMonth()].slice(0, 3);
+    function set(sel, txt) { Array.prototype.forEach.call(document.querySelectorAll(sel), function (n) { n.textContent = txt; }); }
+    set('.m-time', time); set('.m-date', long); set('.m-mclock', short + ' ' + time);
+  }
+
+  /* ------------------------------------------------------------ boot */
+  var hero = null, seq = null;
+  try { stampClocks(); } catch (e) {}
+  try {
+    var he = document.querySelector('[data-mock="hero"]');
+    if (he) hero = new Hero(new Mock(he), document.querySelector('.demo'));
+  } catch (e) { hero = null; }
+  try {
+    var se = document.querySelector('[data-mock="seq"]');
+    if (se) seq = new Seq(document.getElementById('how'), new Mock(se));
+  } catch (e) { seq = null; }
+  try {
+    var fv = document.querySelector('.glance video');
+    if (fv && 'IntersectionObserver' in window) failClip(fv);
+  } catch (e) {}
+
+  onSheet.push(function () {
+    [hero && hero.m, seq && seq.m].forEach(function (m) { if (m && m.state) { m.drawn = -1; m.render(m.state); } });
+  });
+  // The hero wallpaper is the LCP image; fetch the frame sheet only after the page has loaded.
+  if (document.readyState === 'complete') loadSheet(); else window.addEventListener('load', loadSheet);
+
+  function remeasure() {
+    try { if (hero) hero.m.measure(); if (seq) seq.measure(); } catch (e) {}
+  }
+  var lastW = window.innerWidth, lastH = document.documentElement.clientHeight, rt = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(rt);
+    rt = setTimeout(function () {
+      var w = window.innerWidth, h = document.documentElement.clientHeight;
+      // A phone's toolbar showing/hiding is a height-only resize: ignore it rather than re-measure mid-scroll.
+      if (w === lastW && Math.abs(h - lastH) < 160) return;
+      lastW = w; lastH = h; remeasure();
+    }, 150);
+  });
+  window.addEventListener('load', remeasure);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) { remeasure(); if (hero) hero.sync(); } });
+  if (reduceMQ) {
+    var onReduce = function () { if (hero) { hero.paused = reduced(); hero.sync(); } remeasure(); };
+    if (reduceMQ.addEventListener) reduceMQ.addEventListener('change', onReduce);
+    else if (reduceMQ.addListener) reduceMQ.addListener(onReduce);
+  }
+})();
+</script>
 <script>
 (function () {
   // Paste the product's checkout link from Lemon Squeezy here (Products -> your product -> Share).
   // While it is empty the button explains that checkout isn't connected, rather than looking like
   // a dead link or, worse, sending someone to a checkout that can't deliver a key.
   var CHECKOUT_URL = '';
+  // Version of the Terms of Use the buyer agrees to; sent to checkout alongside the claim token.
+  var TERMS_VERSION = '2026-09-24';
 
   var STORE = 'macid-claim';           // this browser's claim token, so a reload doesn't lose the key
   var POLL_MS = 3000;
@@ -460,7 +1161,7 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
     nodes.push(copy);
     var steps = el('ol', 'claim-steps');
     ['Download and open Mac ID.', 'When it asks, paste this key and press Activate.',
-     'Save it somewhere safe. It never expires, and works on any Mac you own.']
+     'Save it somewhere safe. It never expires. It activates on one Mac; to move it to a new one, email support@macid.net.']
       .forEach(function (t) { steps.appendChild(el('li', null, t)); });
     nodes.push(steps);
     nodes.push(el('p', 'claim-help', 'Questions? support@macid.net'));
@@ -498,7 +1199,8 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
     save({ token: token, created: Date.now() });
     paid = false;
     var url = CHECKOUT_URL + (CHECKOUT_URL.indexOf('?') >= 0 ? '&' : '?') +
-              'embed=1&checkout[custom][claim]=' + token;
+              'embed=1&checkout[custom][claim]=' + token +
+              '&checkout[custom][terms]=' + TERMS_VERSION;
     showWaiting();
     pollUntil = Date.now() + POLL_FOR_MS;
     poll(token);
@@ -509,8 +1211,20 @@ footer{padding:52px 0 64px; border-top:1px solid rgba(255,255,255,.07); margin-t
     }
   }
 
+  var terms = document.getElementById('terms-agree');
+  var termsMsg = document.getElementById('terms-msg');
+  if (terms) terms.addEventListener('change', function () {
+    if (terms.checked) { terms.removeAttribute('aria-invalid'); if (termsMsg) termsMsg.textContent = ''; }
+  });
+
   document.getElementById('buy').addEventListener('click', function (e) {
     e.preventDefault();
+    // The Terms of Use must be accepted first; without the checkbox there is no checkout at all.
+    if (!terms || !terms.checked) {
+      if (termsMsg) termsMsg.textContent = 'Please agree to the Terms of Use first.';
+      if (terms) { terms.setAttribute('aria-invalid', 'true'); terms.focus(); }
+      return;
+    }
     if (!CHECKOUT_URL) {
       alert('Checkout is not connected yet.\n\nOnce it is, this button takes you through a $4.99 checkout and shows your licence key right here as soon as you’ve paid.');
       return;
