@@ -177,6 +177,23 @@ final class OnboardingController {
     /// step and saves samples directly instead of continuing to the password step.
     private let isEnrollmentOnly: Bool
 
+    /// Face ID-style capture: after the straight-ahead pose, the person moves their head in a slow
+    /// circle, twice, and whichever direction they're pointing gets captured. Replaces the nine-step
+    /// guided sequence (left, then top left, then top...). Samples are stored under the same eight
+    /// direction names, so identities enrolled either way are interchangeable.
+    ///
+    /// On only in local builds for now: the no-save test (`ENROLLMENT_PREVIEW`) and the owner's own
+    /// copy (`CIRCULAR_ENROLLMENT`). Releases keep the guided sequence until it has been tried on
+    /// real faces.
+    #if ENROLLMENT_PREVIEW || CIRCULAR_ENROLLMENT
+    static let usesCircularEnrollment = true
+    #else
+    static let usesCircularEnrollment = false
+    #endif
+
+    /// Enrollment test build only: run the capture, show what it collected, save nothing.
+    var isDryRun = false
+
     /// True when started by `startPasswordOnly()` — jumps straight to `.password` and
     /// treats Back as "cancel" rather than a setup flow that isn't running.
     private let isPasswordOnly: Bool
@@ -474,6 +491,14 @@ final class OnboardingController {
     var enrollmentInstruction: String {
         if enrollmentComplete { return "Face captured" }
         if isTooFar { return "Bring your face closer" }
+        if isCircling {
+            if let pauseUntil = circleLapPauseUntil, ContinuousClock.now < pauseUntil {
+                return "First circle done"
+            }
+            return circleLap == 1
+                ? "Slowly move your head in a circle"
+                : "One more time: move your head in a circle"
+        }
         return currentPose?.instruction ?? ""
     }
 
@@ -491,6 +516,15 @@ final class OnboardingController {
     /// Live head direction, or `nil` when there's nothing to point at. Axes are normalized
     /// against the current pose's thresholds, so `progress` hits 1 as the pose starts matching.
     var headTurn: HeadTurn? {
+        if isCircling {
+            guard step == .enroll, !enrollmentComplete, faceDetected, !isTooFar,
+                  let yaw = currentYaw, let pitch = currentPitch else { return nil }
+            let (x, y) = circleAxes(yaw: yaw, pitch: pitch, widened: false)
+            let magnitude = (x * x + y * y).squareRoot()
+            guard magnitude > headTurnDeadzone else { return nil }
+            let degrees = atan2(x, y) * 180 / .pi
+            return HeadTurn(angle: degrees < 0 ? degrees + 360 : degrees, progress: min(magnitude, 1))
+        }
         guard step == .enroll, !enrollmentComplete, faceDetected, !isTooFar,
               let pose = currentPose, pose != .center,
               let yaw = currentYaw, let pitch = currentPitch else { return nil }
@@ -514,6 +548,12 @@ final class OnboardingController {
     }
 
     var overallEnrollmentProgress: Double {
+        if Self.usesCircularEnrollment {
+            let total = Double(samplesPerPose + 8 * samplesPerPose * Self.circleLaps)
+            let done = Double(min(currentPoseIndex, 1) * samplesPerPose + capturedForCurrentPose
+                + circleSampleCounts.values.reduce(0, +))
+            return min(done / total, 1.0)
+        }
         let total = Double(EnrollmentPose.allCases.count * samplesPerPose)
         let done = Double(currentPoseIndex * samplesPerPose + capturedForCurrentPose)
         return min(done / total, 1.0)
@@ -646,6 +686,7 @@ final class OnboardingController {
 
     /// Note `pendingName` deliberately survives — no reason to make the user retype it.
     private func resetEnrollmentState() {
+        resetCircleState()
         collectedSamples = []
         nameError = nil
         currentPoseIndex = 0
@@ -814,7 +855,8 @@ final class OnboardingController {
 
     private func processEnrollFrame() async {
         guard step == .enroll, !enrollmentComplete, !isProcessingFrame,
-              let cameraFrame = camera.currentFrame, let pose = currentPose else { return }
+              let cameraFrame = camera.currentFrame, let pose = currentPose ?? (isCircling ? .center : nil)
+        else { return }
         isProcessingFrame = true
         defer { isProcessingFrame = false }
 
@@ -896,6 +938,11 @@ final class OnboardingController {
         // isn't accepted toward enrollment.
         let alignmentOK = result.alignmentTier == .fivePoint
         let widened = ContinuousClock.now - poseStartedAt > stallTimeout
+        if isCircling {
+            await processCircleFrame(result, yaw: yaw, pitch: pitch,
+                                     usable: qualityOK && alignmentOK && !isTooFar, widened: widened)
+            return
+        }
         let poseOK = poseMatches(yaw: yaw, pitch: pitch, pose: pose, widened: widened)
         guard qualityOK, alignmentOK, !isTooFar, poseOK else {
             matchStreak = 0
@@ -925,6 +972,12 @@ final class OnboardingController {
                 centerPulseTick += 1
             } else {
                 capturedPoses.insert(pose)
+            }
+            if Self.usesCircularEnrollment && pose == .center {
+                currentPoseIndex = 1
+                capturedForCurrentPose = 0
+                beginCircleLap(1)
+                return
             }
             currentPoseIndex += 1
             capturedForCurrentPose = 0
@@ -979,8 +1032,182 @@ final class OnboardingController {
 
         camera.stop()
 
+        if isDryRun {
+            reportDryRun()
+            return
+        }
+
         navDirection = .forward
         withAnimation(OnboardingMetrics.stepAnimation) { step = .name }
+    }
+
+    // MARK: - Circular capture
+
+    /// Two laps, like Face ID's two scans. The second doubles the samples per direction, which is
+    /// what makes recognition at an angle more reliable.
+    static let circleLaps = 2
+    /// 1 or 2 while circling; 0 before the straight-ahead pose is done.
+    private(set) var circleLap = 0
+    var isCircling: Bool { Self.usesCircularEnrollment && circleLap > 0 }
+    private var circleSampleCounts: [EnrollmentPose: Int] = [:]
+    private var circleLastCaptureAt: [EnrollmentPose: ContinuousClock.Instant] = [:]
+    private var circleStreakPose: EnrollmentPose?
+    private var circleStreak = 0
+    private var circleLastAngles: (yaw: Float, pitch: Float)?
+    /// A beat between laps so "First circle done" can be read before the ring empties again.
+    private var circleLapPauseUntil: ContinuousClock.Instant?
+    private var circleStartedAt: ContinuousClock.Instant?
+    private var circleRejectedForMotion = 0
+
+    /// Frames in the same direction before one is kept, and the gap between two kept frames of
+    /// the same direction, so a lap collects distinct frames rather than one frame twice.
+    private let circleStreakNeeded = 2
+    private let circleSampleSpacing: Duration = .milliseconds(200)
+    /// Head movement between consecutive processed frames above which the frame is likely
+    /// motion-blurred. A slow circle moves about 0.02–0.04 rad per frame.
+    private let circleMaxStep: Float = 0.09
+    /// Looking down is the hardest direction on a laptop camera; same idea as `matchLeniency`.
+    private let circleDownLeniency: Float = 1.3
+
+    private func resetCircleState() {
+        circleLap = 0
+        circleSampleCounts = [:]
+        circleLastCaptureAt = [:]
+        circleStreakPose = nil
+        circleStreak = 0
+        circleLastAngles = nil
+        circleLapPauseUntil = nil
+        circleStartedAt = nil
+        circleRejectedForMotion = 0
+    }
+
+    private func beginCircleLap(_ lap: Int) {
+        circleLap = lap
+        circleStreakPose = nil
+        circleStreak = 0
+        poseStartedAt = .now
+        if lap == 1 {
+            circleStartedAt = .now
+        } else {
+            // The ring empties for the second lap, as Face ID's does between scans.
+            centerPulseTick += 1
+            capturedPoses = []
+            circleLapPauseUntil = .now + .milliseconds(1100)
+        }
+    }
+
+    /// Pose relative to neutral as ring axes: x right, y up, each 1.0 at the capture threshold.
+    private func circleAxes(yaw: Float, pitch: Float, widened: Bool) -> (Double, Double) {
+        let factor = widened ? stallWidenFactor : 1
+        var y = -pitch / (pitchInnerThreshold / factor)
+        if pitch > 0 { y *= circleDownLeniency }
+        return (Double(-yaw / (yawInnerThreshold / factor)), Double(y))
+    }
+
+    /// Which of the eight directions the head points in, once it's turned far enough.
+    private func circleSector(yaw: Float, pitch: Float, widened: Bool) -> EnrollmentPose? {
+        guard abs(yaw) < yawOuterCap, abs(pitch) < pitchOuterCap else { return nil }
+        let (x, y) = circleAxes(yaw: yaw, pitch: pitch, widened: widened)
+        guard (x * x + y * y).squareRoot() >= 1 else { return nil }
+        var degrees = atan2(x, y) * 180 / .pi
+        if degrees < 0 { degrees += 360 }
+        let sectorAngle = Double(Int((degrees / 45).rounded()) % 8) * 45
+        return EnrollmentPose.allCases.first { $0.compassAngle == sectorAngle }
+    }
+
+    private func processCircleFrame(_ result: FaceRecognitionResult, yaw: Float, pitch: Float,
+                                    usable: Bool, widened: Bool) async {
+        if let pauseUntil = circleLapPauseUntil {
+            guard ContinuousClock.now >= pauseUntil else { return }
+            circleLapPauseUntil = nil
+        }
+        defer { circleLastAngles = (yaw, pitch) }
+        guard usable else { circleStreak = 0; return }
+        if let last = circleLastAngles,
+           hypot(yaw - last.yaw, pitch - last.pitch) > circleMaxStep {
+            circleRejectedForMotion += 1
+            circleStreak = 0
+            return
+        }
+        guard let sector = circleSector(yaw: yaw, pitch: pitch, widened: widened) else {
+            circleStreak = 0
+            circleStreakPose = nil
+            return
+        }
+        if sector != circleStreakPose {
+            circleStreakPose = sector
+            circleStreak = 0
+        }
+        circleStreak += 1
+        guard circleStreak >= circleStreakNeeded else { return }
+
+        let quota = samplesPerPose * circleLap
+        guard circleSampleCounts[sector, default: 0] < quota else { return }
+        let now = ContinuousClock.now
+        if let last = circleLastCaptureAt[sector], now - last < circleSampleSpacing { return }
+
+        collectedSamples.append(CollectedSample(
+            embedding: result.embedding, pose: sector, quality: result.quality, capturedAt: Date()
+        ))
+        circleSampleCounts[sector, default: 0] += 1
+        circleLastCaptureAt[sector] = now
+        circleStreak = 0
+        // Progress resets the stall timer, so the bands only widen for someone who's stuck.
+        poseStartedAt = now
+        if circleSampleCounts[sector, default: 0] >= quota {
+            capturedPoses.insert(sector)
+        }
+
+        let directions = EnrollmentPose.allCases.filter { $0 != .center }
+        guard directions.allSatisfy({ circleSampleCounts[$0, default: 0] >= quota }) else { return }
+        if circleLap < Self.circleLaps {
+            beginCircleLap(circleLap + 1)
+        } else {
+            await finishEnrollment()
+        }
+    }
+
+    // MARK: - Enrollment test build
+
+    /// Enrollment test build only: the notch enrollment on its own, nothing saved.
+    static func startEnrollmentPreview() {
+        let controller = OnboardingController(isEnrollmentOnly: true, enrollmentTarget: .newIdentity)
+        controller.isDryRun = true
+        controller.pendingName = "Test"
+        NotchOverlayController.shared.presentOnboarding(controller)
+    }
+
+    private func reportDryRun() {
+        let seconds = circleStartedAt.map { ContinuousClock.now - $0 }
+            .map { Double($0.components.seconds) + Double($0.components.attoseconds) / 1e18 } ?? 0
+        let order: [EnrollmentPose] = [.top, .topRight, .right, .bottomRight, .bottom, .bottomLeft, .left, .topLeft]
+        let perDirection = order.map { pose in
+            "\(pose.name.replacingOccurrences(of: "_", with: " ")) \(collectedSamples.filter { $0.pose == pose }.count)"
+        }.joined(separator: ", ")
+        let summary = """
+            Both circles took \(String(format: "%.1f", seconds)) seconds.
+
+            Captured \(collectedSamples.count) face samples: straight ahead \(collectedSamples.filter { $0.pose == .center }.count), \(perDirection).
+
+            \(circleRejectedForMotion) frames were skipped for moving too fast.
+
+            This was a test, so nothing was saved and your enrolled faces are unchanged.
+            """
+        teardown()
+        NotchOverlayController.shared.dismissOnboarding()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Enrollment test finished"
+        alert.informativeText = summary
+        alert.addButton(withTitle: "Try Again")
+        alert.addButton(withTitle: "Quit")
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSApp.setActivationPolicy(.accessory)
+            Self.startEnrollmentPreview()
+        } else {
+            NSApp.terminate(nil)
+        }
     }
 
     // MARK: - Naming
