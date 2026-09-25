@@ -160,6 +160,7 @@ final class AppSettings {
         /// `ArcFaceEmbedder.thresholdCalibration`.
         static let matchThresholdModel = "GlanceSettings.matchThresholdModel"
         static let livenessChecksEnabled = "GlanceSettings.livenessChecksEnabled"
+        static let requireEyeContact = "GlanceSettings.requireEyeContact"
         static let livenessMode = "GlanceSettings.livenessMode"
         static let printedPhotoSensitivity = "GlanceSettings.printedPhotoSensitivity"
         static let minimumFaceWidth = "GlanceSettings.minimumFaceWidth"
@@ -198,6 +199,11 @@ final class AppSettings {
     /// alone decides an unlock — a photo of the enrolled user would pass.
     var livenessChecksEnabled: Bool {
         didSet { defaults.set(livenessChecksEnabled, forKey: Key.livenessChecksEnabled) }
+    }
+    /// Unlock only while the person's eyes are open and on the camera — see `EyeContact`. Off by
+    /// default: it adds a moment to every unlock and asks something of the user.
+    var requireEyeContact: Bool {
+        didSet { defaults.set(requireEyeContact, forKey: Key.requireEyeContact) }
     }
     /// Light (deny-only) vs Heavy (deny plus a required proof of life) —
     /// see `LivenessMode`.
@@ -345,6 +351,7 @@ final class AppSettings {
             defaults.set(ArcFaceEmbedder.thresholdCalibration, forKey: Key.matchThresholdModel)
         }
         livenessChecksEnabled = defaults.object(forKey: Key.livenessChecksEnabled) as? Bool ?? true
+        requireEyeContact = defaults.object(forKey: Key.requireEyeContact) as? Bool ?? false
         // Light by default — Heavy requires a blink/pose/depth signal a
         // still, non-blinking user may never produce, while Light still
         // catches the main attack (a photo on a phone screen).

@@ -33,3 +33,4 @@ web/service/sales.json
 # Local tool environment for building the installer DMG.
 src/tools/.dmg-venv/
 __pycache__/
+src/tools/eye_contact_probe.json

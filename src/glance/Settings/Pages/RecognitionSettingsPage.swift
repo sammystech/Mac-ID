@@ -77,6 +77,19 @@ struct RecognitionSettingsPage: View {
                 }
                 SettingsCaption(text: LivenessProtection(settings: settings).summary)
             }
+
+            VStack(alignment: .leading, spacing: 8) {
+                SettingsSectionTitle(text: "Attention")
+                SettingsGroup {
+                    SettingsRowContent(
+                        title: "Require eye contact",
+                        subtitle: "Only unlocks when your eyes are open and you're looking at your Mac. Won't unlock if your eyes are closed or you're looking away.",
+                        subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+                    ) {
+                        MacIDToggle(isOn: $settings.requireEyeContact)
+                    }
+                }
+            }
         }
     }
 

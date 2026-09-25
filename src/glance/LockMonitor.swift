@@ -18,6 +18,10 @@ enum LockEventKind {
     case willSleep
     /// Display turned back on, from system sleep, display sleep, or the screensaver stopping.
     case wake
+    /// Another macOS account took over the screen (fast user switching), or this one came back.
+    /// Only ever a reason to stand down or re-check — never a trigger to scan.
+    case sessionResigned
+    case sessionActivated
 }
 
 @Observable
@@ -102,6 +106,23 @@ final class LockMonitor {
         ) { [weak self] _ in
             self?.recordWake()
         })
+        // With two accounts logged in, both copies of Mac ID keep running and the one in the background
+        // still sees its own session as locked. These make it stand down the instant another account
+        // takes the screen, instead of lighting the camera over someone else's session.
+        workspaceObservers.append(workspace.addObserver(
+            forName: NSWorkspace.sessionDidResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.record(.sessionResigned)
+        })
+        workspaceObservers.append(workspace.addObserver(
+            forName: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.record(.sessionActivated)
+        })
         workspaceObservers.append(workspace.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
@@ -123,10 +144,19 @@ final class LockMonitor {
     }
 
     /// Authoritative lock state from the CoreGraphics session server, not a spoofable notification. Fails closed if unavailable.
+    ///
+    /// "Locked" here means *this account's* lock screen is what's on the display. A session that another
+    /// account has switched away from also reports itself locked, but it isn't on the console: nothing
+    /// typed from it can reach the screen, and scanning from it would take the camera from whoever is
+    /// actually there. So an off-console session reads as not locked, which stands every caller down.
     nonisolated static func isScreenActuallyLocked() -> Bool {
         guard let dict = CGSessionCopyCurrentDictionary() as? [String: Any] else {
             return false
         }
+        // `kCGSessionOnConsoleKey` is a C macro, so Swift can't see it; this is its value. Only an
+        // explicit "not on console" stands down: if a future macOS dropped the key, face unlock should
+        // keep working as before rather than stop everywhere.
+        guard (dict["kCGSSessionOnConsoleKey"] as? Bool) ?? true else { return false }
         return (dict["CGSSessionScreenIsLocked"] as? Bool) ?? false
     }
 }

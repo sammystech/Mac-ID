@@ -284,7 +284,7 @@ final class FaceUnlockCoordinator {
         switch event {
         case .wake: return .onWake
         case .screenLocked: return .onLock
-        case .screenUnlocked, .willSleep, nil: return nil
+        case .screenUnlocked, .willSleep, .sessionResigned, .sessionActivated, nil: return nil
         }
     }
 
@@ -518,6 +518,12 @@ final class FaceUnlockCoordinator {
         var readyMatch: ScoredIdentity?
         /// Turning liveness off in Settings makes this half permanently ready.
         var livenessConfirmed = !livenessEnabled
+        /// "Require eye contact": consecutive frames with eyes open and on the camera. Read once per
+        /// scan, like the liveness switch, so a scan doesn't change rules halfway through.
+        let requireEyeContact = AppSettings.shared.requireEyeContact
+        var attentiveStreak = 0
+        var lastEyeReading: EyeContact.Reading?
+        var matchedWithoutEyeContact = false
         /// Last frame's selected face, passed back so `selectDominantFace` stays on the same person instead of flip-flopping.
         var lastFaceBoundingBox: CGRect?
         /// Cheap way to detect "no new camera frame yet" vs. "fresh frame" — without it a repeat frame would corrupt the liveness motion signal.
@@ -571,6 +577,7 @@ final class FaceUnlockCoordinator {
             guard let (result, livenessFrame) = outcome else {
                 consecutiveWrongFaceFrames = 0
                 lastFaceBoundingBox = nil
+                attentiveStreak = 0
                 // Whoever was being tracked is gone; their partial template must not be blended
                 // into whoever shows up next.
                 recentEmbeddings.removeAll()
@@ -578,6 +585,11 @@ final class FaceUnlockCoordinator {
                 continue
             }
             lastFaceBoundingBox = result.face.normalizedBoundingBox
+            if requireEyeContact {
+                let reading = EyeContact.reading(for: result.face)
+                lastEyeReading = reading
+                attentiveStreak = reading.map(EyeContact.isLooking) == true ? attentiveStreak + 1 : 0
+            }
 
             // Fed regardless of match, so liveness stays a genuinely independent gate rather than one starved by recognition confidence.
             var confirmingCue: LivenessCue?
@@ -654,7 +666,13 @@ final class FaceUnlockCoordinator {
                 }
             }
 
-            if let readyMatch, livenessConfirmed {
+            if readyMatch != nil, livenessConfirmed, requireEyeContact,
+               attentiveStreak < EyeContact.requiredFrames {
+                // Recognised, but not looking: keep scanning rather than refuse, so glancing at the
+                // camera a moment later still unlocks.
+                matchedWithoutEyeContact = true
+                statusMessage = "Look at your Mac to unlock."
+            } else if let readyMatch, livenessConfirmed {
                 statusMessage = "Recognized — unlocking…"
                 let sinceFirstFrame = firstFrameAt.map { Self.ms(from: $0) } ?? 0
                 Self.timingLog.info("matched after \(processedFrames, privacy: .public) frames, \(sinceFirstFrame, privacy: .public) ms of recognition, \(Self.ms(from: scanStartedAt), privacy: .public) ms total")
@@ -672,7 +690,16 @@ final class FaceUnlockCoordinator {
 
             try? await Task.sleep(nanoseconds: Self.framePollInterval)
         }
-        if livenessEnabled && !livenessConfirmed {
+        if matchedWithoutEyeContact {
+            let r = lastEyeReading
+            Self.timingLog.info(
+                """
+                scan window ended: recognised but no eye contact - last yaw \(r.map { String(format: "%.2f", $0.yaw) } ?? "-", privacy: .public) \
+                pitch \(r.map { String(format: "%.2f", $0.pitch) } ?? "-", privacy: .public) \
+                eyes \(r.map { String(format: "%.2f", $0.eyeOpenness) } ?? "-", privacy: .public) \
+                pupil \(r.map { String(format: "%.2f,%.2f", $0.pupilX, $0.pupilY) } ?? "-", privacy: .public)
+                """)
+        } else if livenessEnabled && !livenessConfirmed {
             Self.timingLog.info("scan window ended: liveness never confirmed (\(processedFrames, privacy: .public) frames)")
         } else {
             Self.timingLog.info("scan window ended without a match (\(processedFrames, privacy: .public) frames)")
