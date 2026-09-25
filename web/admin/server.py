@@ -30,6 +30,9 @@ LICENSE_TOOL = os.path.join(HERE, "bin", "macid-license")
 # Gitignored: the token reads every buyer's name and email.
 SERVICE_CONFIG = os.path.join(HERE, "service-config.json")
 HOST, PORT = "127.0.0.1", 8787
+# Where the fulfilment service answers when its config doesn't say: the PC-hosted copy of this admin
+# (web/service/admin_web.py) runs next to it and reads the service's own config.json.
+DEFAULT_SERVICE_URL = "http://127.0.0.1:8790"
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -93,7 +96,7 @@ def online_sales():
         cfg = json.load(fh)
     # A real User-Agent is required, not decoration: Cloudflare's Browser Integrity Check rejects
     # Python's default "Python-urllib/3.x" with error 1010 before the request reaches the PC.
-    req = urllib.request.Request(cfg["service_url"].rstrip("/") + "/api/sales",
+    req = urllib.request.Request(cfg.get("service_url", DEFAULT_SERVICE_URL).rstrip("/") + "/api/sales",
                                  headers={"Authorization": "Bearer " + cfg["admin_token"],
                                           "User-Agent": "MacID-Admin/1.0"})
     try:
@@ -122,7 +125,7 @@ def service_call(path, payload=None):
     with open(SERVICE_CONFIG) as fh:
         cfg = json.load(fh)
     data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(cfg["service_url"].rstrip("/") + path, data=data,
+    req = urllib.request.Request(cfg.get("service_url", DEFAULT_SERVICE_URL).rstrip("/") + path, data=data,
                                  method="POST" if data else "GET",
                                  headers={"Authorization": "Bearer " + cfg["admin_token"],
                                           "User-Agent": "MacID-Admin/1.0",
@@ -192,8 +195,33 @@ def terms_log_csv():
 # ----------------------------------------------------------------- server
 
 class Handler(BaseHTTPRequestHandler):
+    # Host names this server answers to. Anything else is refused, which stops DNS rebinding: a page
+    # on some other site pointing its own hostname at 127.0.0.1 to read or drive this dashboard.
+    ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+
     def log_message(self, *args):
         pass  # the dashboard is the UI; request spam is noise
+
+    def _authorized(self):
+        """Who may use the dashboard at all. Anyone on this machine, here; the PC-hosted copy
+        overrides this to require the owner's Tailscale identity."""
+        return True
+
+    def _refused(self):
+        """Returns a reason to refuse this request, or None."""
+        host = (self.headers.get("Host") or "").lower()
+        if host not in self.ALLOWED_HOSTS:
+            return "unexpected host"
+        # A form or fetch from another website can still *send* a POST here even though it can't
+        # read the answer, and that would be enough to issue or release a key. Browsers stamp such
+        # requests with the other site's Origin; only this page's own origin is accepted.
+        if self.command == "POST":
+            origin = self.headers.get("Origin")
+            if origin and urllib.parse.urlparse(origin).netloc.lower() != host:
+                return "cross-site request"
+        if not self._authorized():
+            return "not signed in"
+        return None
 
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else body.encode()
@@ -206,6 +234,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        refused = self._refused()
+        if refused:
+            return self._send(403, json.dumps({"error": refused}))
         path = urllib.parse.urlparse(self.path).path
         if path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as fh:
@@ -251,6 +282,9 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
+        refused = self._refused()
+        if refused:
+            return self._send(403, json.dumps({"error": refused}))
         path = urllib.parse.urlparse(self.path).path
         length = int(self.headers.get("Content-Length", 0))
         try:

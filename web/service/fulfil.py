@@ -509,7 +509,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path.rstrip("/")
-        if path in ("/api/activate", "/api/activation/release", "/api/terms/accept", "/api/trial", "/api/recover"):
+        if path in ("/api/activate", "/api/activation/release", "/api/terms/accept", "/api/trial", "/api/recover",
+                    "/api/pool/take"):
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0 or length > 4096:
                 return self._send(413, {"error": "bad length"})
@@ -532,6 +533,16 @@ class Handler(BaseHTTPRequestHandler):
             # would mean nothing.
             if not self._admin_ok():
                 return self._send(403, {"error": "forbidden"})
+            if path == "/api/pool/take":
+                # A free licence issued from the admin panel on this PC. Taken from the same pool as
+                # sales, under the same lock, so a sale and a hand-issued key can never get the same
+                # key - and the minting secret never has to live on this machine.
+                with LOCK:
+                    key, remaining = pop_key()
+                if not key:
+                    return self._send(503, {"error": "The key pool is empty. Top it up from the Mac."})
+                log(f"admin: took a key from the pool for a hand-issued licence, {remaining} left")
+                return self._send(200, {"key": key, "remaining": remaining})
             key_hash = str(payload.get("key_hash") or "").lower()
             with LOCK:
                 activations = read_json(ACTIVATIONS, {})
