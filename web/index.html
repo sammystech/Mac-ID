@@ -86,7 +86,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
 /* =====================================================================  type */
 .h1{font-size:clamp(2.6rem,.9rem + 6.5vw,7.25rem);line-height:.98;letter-spacing:-.032em;font-weight:600;text-wrap:balance}
 .h2{font-size:clamp(2.05rem,1.05rem + 3.2vw,4.2rem);line-height:1.03;letter-spacing:-.03em;font-weight:600;text-wrap:balance}
-.lede{font-size:clamp(1.1rem,1rem + .42vw,1.33rem);line-height:1.46;letter-spacing:-.012em;color:var(--fg-2);text-wrap:pretty}
+.lede{font-size:clamp(1.2rem,1.05rem + .6vw,1.55rem);line-height:1.46;letter-spacing:-.012em;color:var(--fg-2);text-wrap:pretty}
 .label{font-size:.9rem;font-weight:600;letter-spacing:-.004em;color:var(--accent-ink);margin-bottom:18px}
 .mono{font-family:var(--mono);font-size:.8125rem;letter-spacing:0}
 .tnum{font-variant-numeric:tabular-nums}
@@ -252,8 +252,8 @@ section[id]{scroll-margin-top:var(--nav-h)}
 .seq-copy{max-width:440px}
 .seq-num{display:flex;gap:12px;margin-bottom:16px;font:500 .8125rem/1 var(--mono);color:var(--fg-3)}
 .seq-num b{font-weight:500;color:var(--accent-ink)}
-.seq-copy h3{font-size:clamp(1.6rem,1.05rem + 1.6vw,2.35rem);line-height:1.08;letter-spacing:-.026em;font-weight:600;margin-bottom:14px;text-wrap:balance}
-.seq-copy p{color:var(--fg-2);font-size:1.0625rem;text-wrap:pretty}
+.seq-copy h3{font-size:clamp(2rem,1.2rem + 2.4vw,3.2rem);line-height:1.08;letter-spacing:-.026em;font-weight:600;margin-bottom:14px;text-wrap:balance}
+.seq-copy p{color:var(--fg-2);font-size:clamp(1.15rem,1rem + .45vw,1.35rem);line-height:1.45;text-wrap:pretty}
 .seq.is-live .seq-step{opacity:.3;transition:opacity .45s var(--ease-out)}
 .seq.is-live .seq-step.is-active{opacity:1}
 @media (max-width:899px){
@@ -270,62 +270,14 @@ section[id]{scroll-margin-top:var(--nav-h)}
 }
 
 /* =====================================================================  features */
-.feat{row-gap:56px;margin-top:clamp(48px,6vw,88px);align-items:start}
-.figure{grid-column:1/span 5}
-.figure-num{display:flex;align-items:baseline;gap:.12em;font-size:clamp(4.2rem,2.2rem + 6vw,8.4rem);line-height:.9;letter-spacing:-.045em;font-weight:300;font-variant-numeric:tabular-nums}
-.figure-num small{font-size:.3em;font-weight:500;letter-spacing:-.01em;color:var(--fg-2)}
-.figure-cap{margin-top:22px;max-width:360px;color:var(--fg-2)}
-.range{margin-top:32px;max-width:400px}
-.range-track{position:relative;height:6px;border-radius:3px;background:var(--bg-4)}
-.range-fill{position:absolute;top:0;bottom:0;left:7%;width:83%;border-radius:3px;background:var(--accent);transform-origin:0 50%}
-.range-ticks{display:flex;justify-content:space-between;margin-top:11px;font:500 .75rem/1 var(--mono);color:var(--fg-3)}
-@supports (animation-timeline:view()){
-  @media (prefers-reduced-motion:no-preference){
-    .range-fill{animation:range-grow linear both;animation-timeline:view();animation-range:entry 30% cover 50%}
-  }
-}
-@keyframes range-grow{from{transform:scaleX(0)}}
-.spec{grid-column:7/-1;border-top:1px solid var(--line-2)}
-.spec-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;row-gap:8px;padding:22px 0 24px;border-bottom:1px solid var(--line)}
-.spec-row dt{font-size:1.125rem;font-weight:600;letter-spacing:-.016em}
-.spec-row .datum{font:500 .78rem/1.9 var(--mono);color:var(--fg-3);text-align:right;white-space:nowrap}
-.spec-row .desc{grid-column:1/-1;color:var(--fg-2);max-width:62ch}
-@media (max-width:1023px){.figure,.spec{grid-column:1/-1}}
-@media (max-width:520px){.spec-row{grid-template-columns:1fr}.spec-row .datum{text-align:left;grid-row:2}}
+.bigfeat{margin-top:clamp(48px,6vw,88px);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(40px,5vw,72px) clamp(24px,4vw,64px)}
+.bigfeat li{border-top:1px solid var(--line-2);padding-top:28px}
+.bigfeat h3{font-size:clamp(1.9rem,1.2rem + 2.2vw,3.1rem);line-height:1.05;letter-spacing:-.03em;font-weight:600;text-wrap:balance}
+.bigfeat p{margin-top:14px;font-size:clamp(1.15rem,1rem + .45vw,1.35rem);line-height:1.45;color:var(--fg-2);max-width:32ch;text-wrap:pretty}
+@media (max-width:720px){.bigfeat{grid-template-columns:1fr}}
 
-/* =====================================================================  setup */
-.setup{margin-top:clamp(48px,6vw,80px);grid-template-columns:repeat(4,minmax(0,1fr));row-gap:48px}
-.setup li{border-top:1px solid var(--line-2);padding-top:22px}
-.setup-n{display:block;margin-bottom:30px;font-size:2.9rem;line-height:1;font-weight:300;letter-spacing:-.04em;color:var(--fg-3);font-variant-numeric:tabular-nums}
-.setup h3{font-size:1.125rem;font-weight:600;letter-spacing:-.016em;margin-bottom:8px}
-.setup p{color:var(--fg-2);font-size:.97rem;text-wrap:pretty}
-@media (max-width:959px){.setup{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.setup{grid-template-columns:1fr;row-gap:36px}.setup-n{font-size:2.2rem;margin-bottom:18px}}
 
-/* =====================================================================  limits */
-.limits{background:var(--bg-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.limits-grid{margin-top:clamp(40px,5vw,72px);row-gap:56px;align-items:start}
-.limits-text{grid-column:1/span 6}
-.limits-side{grid-column:8/-1}
-.limits-statement{font-size:clamp(1.4rem,1.05rem + 1.1vw,1.95rem);line-height:1.22;letter-spacing:-.022em;font-weight:600;margin-bottom:26px;text-wrap:balance}
-.limits-text p:not(.limits-statement){color:var(--fg-2);font-size:1.0625rem;text-wrap:pretty}
-.limits-text p + p{margin-top:16px}
-.glance{border:1px solid var(--line);border-radius:var(--r-l);background:var(--bg);padding:0 24px 24px}
-.glance-panel{position:relative;width:176px;height:150px;margin:0 auto;background:#000;border-radius:0 0 46px 46px}
-.glance-panel::before,.glance-panel::after{content:"";position:absolute;top:0;width:14px;height:14px}
-.glance-panel::before{right:100%;background:radial-gradient(circle at 0 100%,rgba(0,0,0,0) 13.4px,#000 14px)}
-.glance-panel::after{left:100%;background:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) 13.4px,#000 14px)}
-.glance-panel video{position:absolute;left:50%;top:20px;width:104px;height:104px;margin-left:-52px}
-.glance figcaption{margin-top:18px;font-size:.875rem;color:var(--fg-3);text-align:center;text-wrap:balance}
-.facts{width:100%;margin-top:28px;border-collapse:collapse;font-size:.95rem}
-.facts caption{text-align:left;padding-bottom:10px;font:500 .78rem/1 var(--mono);color:var(--fg-3)}
-.facts th,.facts td{padding:12px 0;border-top:1px solid var(--line);vertical-align:top}
-.facts th{width:56%;text-align:left;font-weight:400;color:var(--fg-2);padding-right:16px}
-.facts td{text-align:right;font-weight:600}
-.facts td svg{display:inline-block;width:15px;height:15px;margin-right:6px;vertical-align:-2px}
-.facts .yes svg{color:var(--fg-2)}
-.facts .no{color:var(--warn)}
-@media (max-width:1023px){.limits-text,.limits-side{grid-column:1/-1}.limits-side{max-width:560px}}
 
 /* =====================================================================  pricing */
 .price-grid{row-gap:48px;align-items:start}
@@ -335,7 +287,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
 .price-amount{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;font-size:clamp(3.6rem,2.6rem + 3vw,5.4rem);line-height:1;letter-spacing:-.045em;font-weight:600;font-variant-numeric:tabular-nums}
 .price-amount span{font-size:1.0625rem;font-weight:500;letter-spacing:-.012em;color:var(--fg-2);white-space:nowrap}
 .price-list{margin:28px 0 30px;border-top:1px solid var(--line)}
-.price-list li{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);color:var(--fg-2);font-size:.97rem}
+.price-list li{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);color:var(--fg-2);font-size:1.1rem}
 .price-list svg{flex:none;width:18px;height:18px;margin-top:3px;color:var(--accent-ink)}
 .price-card .btn{width:100%}
 .terms{display:flex;align-items:flex-start;gap:11px;margin:0 0 16px;font-size:.94rem;color:var(--fg-2)}
@@ -364,10 +316,6 @@ section[id]{scroll-margin-top:var(--nav-h)}
 .dl-head .lede{margin-top:20px;max-width:520px}
 .dl-side{display:flex;flex-direction:column;align-items:flex-start;gap:16px}
 .dl-meta{font-size:.875rem;color:var(--fg-3)}
-.upgrade{margin-top:clamp(56px,7vw,96px);padding-top:26px;border-top:1px solid var(--line);row-gap:12px}
-.upgrade h3{grid-column:1/span 4;font-size:1.125rem;font-weight:600;letter-spacing:-.016em}
-.upgrade p{grid-column:5/-1;color:var(--fg-2);max-width:68ch;text-wrap:pretty}
-@media (max-width:800px){.upgrade h3,.upgrade p{grid-column:1/-1}}
 
 /* =====================================================================  footer */
 .foot{padding:40px 0 56px;border-top:1px solid var(--line);font-size:.875rem;color:var(--fg-3)}
@@ -454,12 +402,12 @@ section[id]{scroll-margin-top:var(--nav-h)}
     <div class="grid hero-grid">
       <h1 id="hero-title" class="h1">Unlock your Mac with a look.</h1>
       <div class="hero-side">
-        <p class="lede">Mac ID is face unlock for your Mac. It recognises your face when the lock screen appears and unlocks your Mac — no typing, no reaching for a key. Your face is processed on the Mac and never leaves it.</p>
+        <p class="lede">Mac ID is face unlock for your Mac. Look at your screen and you’re in. No typing.</p>
         <div class="cta">
           <a class="btn btn-primary" href="#download"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-down"/></svg>Download for Mac</a>
           <a class="btn btn-secondary" href="#pricing">Buy a licence · $4.99</a>
         </div>
-        <p class="meta">Free for a day, then $4.99 once · macOS 15 or later · Apple silicon</p>
+        <p class="meta">Free for a day · $4.99 once · macOS 15 or later</p>
       </div>
     </div>
 
@@ -548,24 +496,24 @@ section[id]{scroll-margin-top:var(--nav-h)}
 
       <ol class="seq-steps">
         <li class="seq-step"><div class="seq-copy">
-          <p class="seq-num"><b>01</b>Lock screen</p>
+          <p class="seq-num"><b>01</b></p>
           <h3>Your Mac locks. The notch opens.</h3>
-          <p>When the lock screen appears, Mac ID opens a small panel under the notch and starts looking for you.</p>
+          <p>Mac ID starts looking for you the moment the lock screen appears.</p>
         </div></li>
         <li class="seq-step"><div class="seq-copy">
-          <p class="seq-num"><b>02</b>Recognition</p>
-          <h3>It recognises you, on the Mac.</h3>
-          <p>An ArcFace model running on the Apple Neural Engine matches your face. Typical recognition takes under a second — real logs show 70–900&nbsp;ms. A liveness check turns away a printed photo or a photo on a phone screen.</p>
+          <p class="seq-num"><b>02</b></p>
+          <h3>It recognises you.</h3>
+          <p>Right on your Mac, usually in under a second.</p>
         </div></li>
         <li class="seq-step"><div class="seq-copy">
-          <p class="seq-num"><b>03</b>Password</p>
-          <h3>It types your password for you.</h3>
-          <p>macOS gives apps no way to approve a login, so Mac ID enters your password. It is stored AES-256-encrypted, and the key is released only by Touch ID or your Mac password.</p>
+          <p class="seq-num"><b>03</b></p>
+          <h3>It types your password.</h3>
+          <p>Kept encrypted, and unlocked only by Touch ID.</p>
         </div></li>
         <li class="seq-step"><div class="seq-copy">
-          <p class="seq-num"><b>04</b>Desktop</p>
+          <p class="seq-num"><b>04</b></p>
           <h3>You’re in.</h3>
-          <p>If it doesn’t recognise you, nothing happens — the lock screen waits, and you type your password as usual.</p>
+          <p>No typing. No waiting.</p>
         </div></li>
       </ol>
     </div>
@@ -577,104 +525,14 @@ section[id]{scroll-margin-top:var(--nav-h)}
   <div class="wrap">
     <div class="sec-head">
       <p class="label">Features</p>
-      <h2 id="features-title" class="h2">Quick, private, and plain about how it works.</h2>
+      <h2 id="features-title" class="h2">Fast. Private. Yours.</h2>
     </div>
-    <div class="grid feat">
-      <div class="figure">
-        <p class="figure-num"><span>70–900</span><small>ms</small></p>
-        <p class="figure-cap">Recognition times from real logs. Typical recognition takes under a second.</p>
-        <div class="range" aria-hidden="true">
-          <div class="range-track"><span class="range-fill"></span></div>
-          <div class="range-ticks"><span>0</span><span>250</span><span>500</span><span>750</span><span>1 s</span></div>
-        </div>
-      </div>
-      <dl class="spec">
-        <div class="spec-row">
-          <dt>Recognition stays on your Mac</dt>
-          <dd class="datum">ArcFace · Neural Engine</dd>
-          <dd class="desc">Your face is matched by an ArcFace model running on the Apple Neural Engine, entirely on the Mac. Your face never leaves it.</dd>
-        </div>
-        <div class="spec-row">
-          <dt>More than one face</dt>
-          <dd class="datum">Multiple people</dd>
-          <dd class="desc">Enrol everyone who shares your Mac&rsquo;s login — a partner, a family member — and any of them can unlock it with a look. Add people in Settings → Your Face; you can also enrol yourself again with glasses or in different lighting to make recognition more reliable.</dd>
-        </div>
-        <div class="spec-row">
-          <dt>Refuses photos</dt>
-          <dd class="datum">Liveness · 3 levels</dd>
-          <dd class="desc">Choose Minimal, Medium or Max protection. Medium and Max reject a printed photo and a photo shown on a phone screen; Max also waits for a sign of a real face, like a blink. More protection takes a little longer. None of them reliably rejects a video — <a class="link" href="#limits">see the limits</a>.</dd>
-        </div>
-        <div class="spec-row">
-          <dt>Your password stays encrypted</dt>
-          <dd class="datum">AES-256 · Touch ID</dd>
-          <dd class="desc">Mac ID unlocks by typing your macOS password. The password is stored AES-256-encrypted, and the key to it is released only by Touch ID or your Mac password.</dd>
-        </div>
-        <div class="spec-row">
-          <dt>Lives in the menu bar</dt>
-          <dd class="datum">Menu bar · notch</dd>
-          <dd class="desc">At the lock screen all you see is a small panel under the notch: it looks for you, shows a check, and gets out of the way.</dd>
-        </div>
-        <div class="spec-row">
-          <dt>One payment, then offline</dt>
-          <dd class="datum">$4.99 · one Mac</dd>
-          <dd class="desc">A licence activates once for one Mac, then works offline. No subscription, no account.</dd>
-        </div>
-        <div class="spec-row">
-          <dt>Signed and notarized by Apple</dt>
-          <dd class="datum">macOS 15+ · Apple silicon</dd>
-          <dd class="desc">For Macs with Apple silicon running macOS 15 Sequoia or later.</dd>
-        </div>
-      </dl>
-    </div>
-  </div>
-</section>
-
-<!-- ======================================================================= setup -->
-<section id="setup" class="section rule" aria-labelledby="setup-title">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="label">Setup</p>
-      <h2 id="setup-title" class="h2">Set up in four steps.</h2>
-    </div>
-    <ol class="grid setup">
-      <li><span class="setup-n" aria-hidden="true">1</span><h3>Install and grant access</h3><p>Drag Mac ID to Applications. It asks for the camera, and for Accessibility so it can type your password at the lock screen.</p></li>
-      <li><span class="setup-n" aria-hidden="true">2</span><h3>Enrol your face</h3><p>Follow the ring: look straight ahead, then turn slightly in each direction. Mac ID stores a mathematical description of your face — not a photograph.</p></li>
-      <li><span class="setup-n" aria-hidden="true">3</span><h3>Paste your licence</h3><p><span class="ui">Settings → About</span> → paste the key from your purchase email, and press Activate. During the 1-day trial you can skip this.</p></li>
-      <li><span class="setup-n" aria-hidden="true">4</span><h3>Lock your Mac</h3><p>The notch opens, finds you, and types your password. If it doesn’t recognise you, nothing happens and you type it yourself.</p></li>
-    </ol>
-  </div>
-</section>
-
-<!-- ======================================================================= limits (honesty) -->
-<section id="limits" class="section limits" aria-labelledby="limits-title">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="label">Limits</p>
-      <h2 id="limits-title" class="h2">Worth knowing before you install.</h2>
-    </div>
-    <div class="grid limits-grid">
-      <div class="limits-text">
-        <p class="limits-statement">Mac ID is a convenience feature, not a security upgrade.</p>
-        <p>A MacBook camera sees a flat image, where an iPhone builds a 3D map of your face — so this cannot be as strong as Face ID or Touch ID. It reliably refuses a printed photo and a photo on a phone screen; it does not reliably refuse a video of you.</p>
-        <p>macOS gives no way for an app to authorise a login, so Mac ID unlocks by typing your stored password. That password is encrypted on your Mac behind Touch ID. If you are not comfortable with that trade, this is not the app for you.</p>
-      </div>
-      <div class="limits-side">
-        <figure class="glance">
-          <div class="glance-panel"><video muted playsinline preload="none" width="192" height="192" poster="assets/scan-fail-end.webp" aria-hidden="true"><source src="assets/scan-fail.mp4" type="video/mp4"></video></div>
-          <figcaption>A failed scan, as the app shows it. The Mac stays locked and waits for your password.</figcaption>
-        </figure>
-        <table class="facts">
-          <caption>At a glance</caption>
-          <tbody>
-            <tr><th scope="row">Printed photo held to the camera</th><td class="yes"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>Refused</td></tr>
-            <tr><th scope="row">Photo on a phone screen</th><td class="yes"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>Refused</td></tr>
-            <tr><th scope="row">A video of you</th><td class="no"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x"/></svg>Not reliably refused</td></tr>
-            <tr><th scope="row">Strength compared with Face ID or Touch ID</th><td class="no">Weaker</td></tr>
-            <tr><th scope="row">How it unlocks</th><td>Types your stored password</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <ul class="bigfeat">
+      <li><h3>Under a second.</h3><p>Recognition usually takes less time than typing your password.</p></li>
+      <li><h3>Stays on your Mac.</h3><p>Your face is recognised on your Mac and never uploaded.</p></li>
+      <li><h3>For the whole family.</h3><p>Enrol everyone who shares your Mac’s login.</p></li>
+      <li><h3>Stops photos.</h3><p>Rejects printed photos and photos on a phone screen.</p></li>
+    </ul>
   </div>
 </section>
 
@@ -685,15 +543,13 @@ section[id]{scroll-margin-top:var(--nav-h)}
       <div class="price-copy">
         <p class="label">Pricing</p>
         <h2 id="pricing-title" class="h2">Try it free for a day. Then $4.99, once.</h2>
-        <p class="lede">Every download gets a full day of everything, with no payment details and no account. If it works for you, a single payment buys a licence that never expires. It checks in once when you activate it, then works offline.</p>
+        <p class="lede">Every feature, free for a day. No card, no account. Then one payment and it’s yours for good.</p>
       </div>
       <div class="price-card">
         <p class="price-amount">$4.99<span>once, for one Mac</span></p>
         <ul class="price-list">
           <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>1-day free trial, no card required</span></li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>A licence key for one Mac, activated once</span></li>
           <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Never expires, no subscription</span></li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Activates once, then works with no internet</span></li>
           <li><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span>Free updates, delivered in the app</span></li>
         </ul>
         <div class="terms">
@@ -702,7 +558,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
         </div>
         <p id="terms-msg" class="terms-msg" aria-live="polite"></p>
         <a class="btn btn-primary" href="#" id="buy">Buy a licence</a>
-        <p class="price-note">Checkout is handled securely by Lemon Squeezy. Your key appears on this page the moment you’ve paid.</p>
+        <p class="price-note">Secure checkout by Lemon Squeezy. Your key appears right here the moment you’ve paid.</p>
         <p class="price-note">Lost your key? <a class="link" href="#recover" id="recover-link">Get it emailed to you</a>.</p>
       </div>
     </div>
@@ -716,23 +572,17 @@ section[id]{scroll-margin-top:var(--nav-h)}
       <div>
         <p class="label">Download</p>
         <h2 id="download-title" class="h2">Get Mac ID.</h2>
-        <p class="lede">Install it and everything works for a day. Enter a licence key any time before or after the trial ends.</p>
+        <p class="lede">Free for a day. No account needed.</p>
       </div>
       <div class="dl-side">
         <div class="cta">
           <a class="btn btn-primary" id="dmg" href="https://github.com/sammystech/Mac-ID/releases/latest/download/Mac-ID.dmg"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-down"/></svg>Download Mac ID</a>
-          <a class="btn btn-secondary" href="https://github.com/sammystech/Mac-ID/releases">Release notes</a>
         </div>
-        <p class="dl-meta">Signed and notarized by Apple · Apple silicon · macOS 15 Sequoia or later · 122&nbsp;MB</p>
+        <p class="dl-meta">macOS 15 or later · Apple silicon · Notarized by Apple</p>
         <p class="dl-meta">By downloading you agree to the <a class="link" href="/terms.html">Terms of Use</a>.</p>
-        <p class="dl-meta">Before you install, <a class="link" href="#limits">read the limits</a>.</p>
       </div>
     </div>
 
-    <div class="grid upgrade">
-      <h3>Already using Mac ID?</h3>
-      <p>Version 1.9 moved to a new, Apple-verified signature, and copies from before it can&rsquo;t update to it on their own. Download it once from this page and drag it into Applications to replace the old one. Your licence and settings come across automatically. You&rsquo;ll set up your face and password again, and approve Camera and Accessibility once more, because macOS ties those to the app&rsquo;s signature.</p>
-    </div>
   </div>
 </section>
 
@@ -1074,20 +924,6 @@ section[id]{scroll-margin-top:var(--nav-h)}
     for (var j = 0; j < this.fades.length; j++) css(this.fades[j], 'opacity', String(r3(k)));
   };
 
-  /* ------------------------------------------------------------ the failed-scan clip in Limits */
-  function failClip(v) {
-    var on = false, timer = 0;
-    function play() { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
-    v.addEventListener('ended', function () {
-      clearTimeout(timer);
-      timer = setTimeout(function () { if (on) { v.currentTime = 0; play(); } }, 1400);   // hold on the failed state
-    });
-    new IntersectionObserver(function (es) {
-      on = es[es.length - 1].isIntersecting && !reduced();
-      if (on) { v.currentTime = 0; play(); } else { clearTimeout(timer); v.pause(); }
-    }, { threshold: .5 }).observe(v);
-  }
-
   /* ------------------------------------------------------------ live clock on both lock screens */
   function stampClocks() {
     var D = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -1110,10 +946,6 @@ section[id]{scroll-margin-top:var(--nav-h)}
     var se = document.querySelector('[data-mock="seq"]');
     if (se) seq = new Seq(document.getElementById('how'), new Mock(se));
   } catch (e) { seq = null; }
-  try {
-    var fv = document.querySelector('.glance video');
-    if (fv && 'IntersectionObserver' in window) failClip(fv);
-  } catch (e) {}
 
   onSheet.push(function () {
     [hero && hero.m, seq && seq.m].forEach(function (m) { if (m && m.state) { m.drawn = -1; m.render(m.state); } });
@@ -1150,7 +982,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
   // a dead link or, worse, sending someone to a checkout that can't deliver a key.
   var CHECKOUT_URL = 'https://macidapp.lemonsqueezy.com/checkout/buy/07c44a15-e8a3-46d4-ab8f-55a485047a7a';
   // Version of the Terms of Use the buyer agrees to; sent to checkout alongside the claim token.
-  var TERMS_VERSION = '2026-09-24';
+  var TERMS_VERSION = '2026-09-25';
 
   var STORE = 'macid-claim';           // this browser's claim token, so a reload doesn't lose the key
   var POLL_MS = 3000;

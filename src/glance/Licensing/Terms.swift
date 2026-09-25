@@ -25,7 +25,7 @@ nonisolated enum Terms {
         if let range = text.range(of: #"Version (\d{4}-\d{2}-\d{2})"#, options: .regularExpression) {
             return String(text[range].dropFirst("Version ".count))
         }
-        return "2026-09-24"
+        return "2026-09-25"
     }()
 
     static let webURL = URL(string: "https://macid.net/terms.html")!
