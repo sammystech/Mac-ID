@@ -60,8 +60,11 @@ final class FaceUnlockCoordinator {
     private(set) var lastOutcome: String?
 
     private var hasArmedForCurrentLock = false
-    /// One-shot per lock session — an auto-retry that could itself auto-retry would loop the camera for the whole lock session.
-    private var hasAutoRetriedForCurrentLock = false
+    /// Automatic retries spent since this lock (or the last wake). Capped at `maxAutoRetries` so a
+    /// failing scan can't loop the camera for the whole time the Mac sits locked; after that,
+    /// hovering the notch is the way to try again.
+    private var autoRetriesForCurrentLock = 0
+    static let maxAutoRetries = 3
     private var scanTask: Task<Void, Never>?
     /// Bumped by every `startScanCycle()`; a cycle bails once superseded (see `runScanCycle(generation:)`).
     private var scanGeneration = 0
@@ -209,7 +212,7 @@ final class FaceUnlockCoordinator {
     private func evaluateTrigger() {
         guard LockMonitor.isScreenActuallyLocked() else {
             hasArmedForCurrentLock = false
-            hasAutoRetriedForCurrentLock = false
+            autoRetriesForCurrentLock = 0
             disarmOverlay()
             return
         }
@@ -219,6 +222,8 @@ final class FaceUnlockCoordinator {
         // `isWithinRecentArmBurst` keeps the several wake signals from one lid-open from each re-arming and fighting over the camera.
         if lockMonitor.lastEvent == .wake, !isWithinRecentArmBurst {
             hasArmedForCurrentLock = false
+            // A fresh wake is a fresh attempt, so it gets a fresh set of automatic retries.
+            autoRetriesForCurrentLock = 0
         }
 
         // Runs before the hasArmedForCurrentLock guard — the space monitor's lifetime is tied to "locked + opted in," not to whether a scan already ran.
@@ -409,7 +414,7 @@ final class FaceUnlockCoordinator {
             scanStartedAt: scanStartedAt
         )
 
-        // A newer cycle now owns the camera and overlay — leave both alone, and leave the auto-retry one-shot unspent.
+        // A newer cycle now owns the camera and overlay — leave both alone, and leave the auto-retries unspent.
         guard generation == scanGeneration else { return }
 
         camera.stop()
@@ -431,7 +436,7 @@ final class FaceUnlockCoordinator {
             statusMessage = "Face not recognized."
             if showsUI {
                 NotchOverlayController.shared.finish(success: false)
-                statusMessage = "Face not recognized — hover the notch to try again."
+                statusMessage = "Face not recognized — \(retryHint)"
                 scheduleAutoRetryIfEnabled(after: NotchOverlayController.shared.failureHoldDuration)
             } else {
                 scheduleAutoRetryIfEnabled(after: headlessRetryDelay)
@@ -440,7 +445,7 @@ final class FaceUnlockCoordinator {
             statusMessage = "Couldn't confirm a live face."
             if showsUI {
                 NotchOverlayController.shared.finish(success: false)
-                statusMessage = "Couldn't confirm a live face — hover the notch to try again."
+                statusMessage = "Couldn't confirm a live face — \(retryHint)"
                 scheduleAutoRetryIfEnabled(after: NotchOverlayController.shared.failureHoldDuration)
             } else {
                 scheduleAutoRetryIfEnabled(after: headlessRetryDelay)
@@ -449,7 +454,7 @@ final class FaceUnlockCoordinator {
             statusMessage = "No face detected."
             if showsUI {
                 // No explicit collapse call: NotchOverlayController's own scanning timeout fires on the same mark and collapses itself.
-                statusMessage = "No face detected — hover the notch to try again."
+                statusMessage = "No face detected — \(retryHint)"
                 scheduleAutoRetryIfEnabled(after: NotchOverlayController.shared.collapseAnimationDuration)
             } else {
                 scheduleAutoRetryIfEnabled(after: headlessRetryDelay)
@@ -457,10 +462,16 @@ final class FaceUnlockCoordinator {
         }
     }
 
+    private var retryHint: String {
+        AppSettings.shared.autoRetry && autoRetriesForCurrentLock < Self.maxAutoRetries
+            ? "trying again…"
+            : "hover the notch to try again."
+    }
+
     /// `delay` waits out whatever the overlay is still showing so the retry doesn't start underneath the previous outcome.
     private func scheduleAutoRetryIfEnabled(after delay: Duration) {
-        guard AppSettings.shared.autoRetryOnce, !hasAutoRetriedForCurrentLock else { return }
-        hasAutoRetriedForCurrentLock = true
+        guard AppSettings.shared.autoRetry, autoRetriesForCurrentLock < Self.maxAutoRetries else { return }
+        autoRetriesForCurrentLock += 1
         autoRetryTask?.cancel()
         autoRetryTask = Task { [weak self] in
             try? await Task.sleep(for: delay)

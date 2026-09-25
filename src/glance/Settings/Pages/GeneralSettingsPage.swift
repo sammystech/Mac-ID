@@ -114,8 +114,12 @@ struct GeneralSettingsPage: View {
                     MacIDToggle(isOn: $settings.retryOnHover)
                 }
                 SettingsGroupDivider()
-                SettingsRowContent(title: "Auto retry once after failure") {
-                    MacIDToggle(isOn: $settings.autoRetryOnce)
+                SettingsRowContent(
+                    title: "Auto retry after failure",
+                    subtitle: "Tries again on its own up to \(FaceUnlockCoordinator.maxAutoRetries) times. After that, hover over the notch to try again.",
+                    subtitleMaxWidth: SettingsMetrics.rowSubtitleMaxWidth
+                ) {
+                    MacIDToggle(isOn: $settings.autoRetry)
                 }
                 SettingsGroupDivider()
                 SettingsRowContent(title: "Haptic feedback") {

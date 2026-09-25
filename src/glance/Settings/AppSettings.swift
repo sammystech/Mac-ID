@@ -171,7 +171,9 @@ final class AppSettings {
         static let unlockTriggers = "GlanceSettings.unlockTriggers"
         static let retryOnHover = "GlanceSettings.retryOnHover"
         static let faceDetectionSeconds = "GlanceSettings.faceDetectionSeconds"
-        static let autoRetryOnce = "GlanceSettings.autoRetryOnce"
+        // New key rather than the old "autoRetryOnce": that one defaulted to off, and retrying is
+        // now on for everyone unless they turn it off.
+        static let autoRetry = "GlanceSettings.autoRetry"
         static let hapticFeedbackEnabled = "GlanceSettings.hapticFeedbackEnabled"
         static let preferredDisplayID = "GlanceSettings.preferredDisplayID"
         static let preferredDisplayName = "GlanceSettings.preferredDisplayName"
@@ -271,8 +273,10 @@ final class AppSettings {
             defaults.set(faceDetectionSeconds, forKey: Key.faceDetectionSeconds)
         }
     }
-    var autoRetryOnce: Bool {
-        didSet { defaults.set(autoRetryOnce, forKey: Key.autoRetryOnce) }
+    /// After a failed scan, try again on its own up to `FaceUnlockCoordinator.maxAutoRetries` times
+    /// before leaving it to a hover on the notch.
+    var autoRetry: Bool {
+        didSet { defaults.set(autoRetry, forKey: Key.autoRetry) }
     }
     /// Trackpad haptic on hovering the notch/pill and on a successful unlock —
     /// see `NotchOverlayView`'s hover handler and `.onChange(of: controller.phase)`.
@@ -396,7 +400,7 @@ final class AppSettings {
         faceDetectionSeconds = (defaults.object(forKey: Key.faceDetectionSeconds) as? Int)
             .map { min(max($0, Self.faceDetectionRange.lowerBound), Self.faceDetectionRange.upperBound) }
             ?? 5
-        autoRetryOnce = defaults.object(forKey: Key.autoRetryOnce) as? Bool ?? false
+        autoRetry = defaults.object(forKey: Key.autoRetry) as? Bool ?? true
         hapticFeedbackEnabled = defaults.object(forKey: Key.hapticFeedbackEnabled) as? Bool ?? true
         preferredDisplayID = defaults.string(forKey: Key.preferredDisplayID)
         preferredDisplayName = defaults.string(forKey: Key.preferredDisplayName)
