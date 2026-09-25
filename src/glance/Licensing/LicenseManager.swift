@@ -60,6 +60,12 @@ final class LicenseManager {
     private static let storageKey = "GlanceSettings.licenseKey"
     /// Proof from the fulfilment service that the stored key belongs to THIS Mac. See Activation.swift.
     private static let receiptKey = "MacID.activationReceipt"
+    /// When a valid key was first accepted without the service's confirmation (see `activate`).
+    private static let pendingSinceKey = "MacID.activationPendingSince"
+    /// How long a valid key keeps working while the service can't be reached. Long enough that an
+    /// outage on our side never stops a customer; short enough that blocking macid.net isn't a way
+    /// to run one key on several Macs.
+    static let offlineGrace: TimeInterval = 7 * 86_400
 
     private(set) var licenseID: UInt64?
     /// Re-derived from the stored key and receipt at launch rather than persisted as a bool, so
@@ -84,38 +90,64 @@ final class LicenseManager {
         if Activation.receiptIsValid(defaults.string(forKey: Self.receiptKey), for: stored) {
             licenseID = payload.id
         } else {
-            // Stored before activation existed, or a receipt for a different Mac (the preferences
-            // were copied). Counted for now; `completePendingActivation()` settles it.
-            licenseID = payload.id
+            // Not confirmed yet: accepted while the service was unreachable, stored before
+            // activation existed, or a receipt for a different Mac (the preferences were copied).
+            // Counted within the grace period; `completePendingActivation()` settles it.
             awaitingActivation = true
+            let since = defaults.object(forKey: Self.pendingSinceKey) as? Date ?? {
+                let now = Date()
+                defaults.set(now, forKey: Self.pendingSinceKey)
+                return now
+            }()
+            if Date().timeIntervalSince(since) < Self.offlineGrace {
+                licenseID = payload.id
+            } else {
+                refusedMessage = "Mac ID couldn't confirm your licence with macid.net for a week. Connect to the internet, then enter your key again."
+            }
         }
     }
 
-    /// Verifies the key offline, then binds it to this Mac with the fulfilment service. Nothing is
-    /// stored unless the service agrees, so a key can't be activated on a second Mac by typing it in.
+    /// Verifies the key offline, then binds it to this Mac with the fulfilment service.
+    ///
+    /// A key the service says belongs to another Mac is refused and not stored. A genuine key that
+    /// can't be confirmed because the service is unreachable is accepted anyway, so a real purchase
+    /// works every time; it's confirmed at the next launch, wake or unlock, and has
+    /// `offlineGrace` to get there.
     func activate(_ key: String) async throws {
         let payload = try Self.verify(key)
         switch await Activation.activate(key: key) {
         case .activated(let receipt):
             defaults.set(key, forKey: Self.storageKey)
             defaults.set(receipt, forKey: Self.receiptKey)
+            defaults.removeObject(forKey: Self.pendingSinceKey)
             licenseID = payload.id
             awaitingActivation = false
             refusedMessage = nil
         case .alreadyActivatedElsewhere:
             throw LicenseError.alreadyActivatedElsewhere
         case .unreachable:
-            throw LicenseError.activationUnavailable
+            defaults.set(key, forKey: Self.storageKey)
+            defaults.removeObject(forKey: Self.receiptKey)
+            if defaults.object(forKey: Self.pendingSinceKey) == nil {
+                defaults.set(Date(), forKey: Self.pendingSinceKey)
+            }
+            licenseID = payload.id
+            awaitingActivation = true
+            refusedMessage = nil
         }
     }
 
-    /// Settles a key stored before activation existed. Called at launch; harmless to call again.
+    /// Confirms a key that hasn't been confirmed yet. Called at launch, wake and unlock; does
+    /// nothing once the key is confirmed.
     func completePendingActivation() async {
         guard awaitingActivation, let stored = defaults.string(forKey: Self.storageKey) else { return }
         switch await Activation.activate(key: stored) {
         case .activated(let receipt):
             defaults.set(receipt, forKey: Self.receiptKey)
+            defaults.removeObject(forKey: Self.pendingSinceKey)
+            licenseID = (try? Self.verify(stored))?.id
             awaitingActivation = false
+            refusedMessage = nil
         case .alreadyActivatedElsewhere:
             deactivate()
             refusedMessage = LicenseError.alreadyActivatedElsewhere.errorDescription
@@ -130,6 +162,7 @@ final class LicenseManager {
     func deactivate() {
         defaults.removeObject(forKey: Self.storageKey)
         defaults.removeObject(forKey: Self.receiptKey)
+        defaults.removeObject(forKey: Self.pendingSinceKey)
         licenseID = nil
         awaitingActivation = false
     }

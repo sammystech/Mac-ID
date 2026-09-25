@@ -252,6 +252,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Once the trial is over and there's no licence, the gate stays up until a key is entered or
     /// the app is quit. It has no close button, so there's no way to dismiss it and carry on.
     @objc private func enforceEntitlement() {
+        // A key accepted while macid.net was unreachable gets confirmed at the first wake or unlock
+        // after the connection is back, not only at the next launch.
+        if LicenseManager.shared.awaitingActivation {
+            Task { await LicenseManager.shared.completePendingActivation() }
+        }
         guard !LicenseManager.shared.isLicensed else {
             trialExpiryTimer?.invalidate()
             trialExpiryTimer = nil

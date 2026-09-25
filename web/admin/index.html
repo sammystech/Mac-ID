@@ -153,7 +153,10 @@ tr.revoked{opacity:.42}
         <div id="tablewrap"><div class="empty">No licences issued yet.</div></div>
       </div>
       <div class="panel glass terms-panel">
-        <h2>Terms of Use agreements</h2>
+        <div class="toolbar" style="justify-content:space-between">
+          <h2 style="margin:0">Terms of Use agreements</h2>
+          <button class="btn btn-sm" id="termscsv" title="Every acceptance, at checkout and in the app, with name and email where known">Export terms log</button>
+        </div>
         <p>Every Mac that ticked "I agree" in the app, including free-trial users. Macs are shown by a
           hashed fingerprint only; one that has activated a licence shows whose it is.</p>
         <div id="termswrap"><div class="empty">Loading…</div></div>
@@ -323,6 +326,7 @@ async function toggle(ref) {
 
 document.getElementById('search').addEventListener('input', render);
 document.getElementById('csv').addEventListener('click', () => location.href = '/api/export.csv');
+document.getElementById('termscsv').addEventListener('click', () => location.href = '/api/terms-log.csv');
 
 document.getElementById('form').addEventListener('submit', async e => {
   e.preventDefault();

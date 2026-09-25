@@ -140,6 +140,55 @@ def activations_by_key(keys):
     return {k: records[key_hash(k)] for k in keys if k and key_hash(k) in records}
 
 
+def terms_log_csv():
+    """Every recorded acceptance of the Terms of Use, oldest first: at checkout on macid.net (with the
+    buyer's name and email from Lemon Squeezy) and in the app (per Mac, matched to whoever's key that
+    Mac activated, when it has)."""
+    def csv_row(values):
+        return ",".join('"' + str(v if v is not None else "").replace('"', '""') + '"' for v in values)
+    # No fallbacks here: an empty log because the PC was briefly unreachable would read as "nobody
+    # accepted", which is worse than an error. Any failure propagates and the download fails loudly.
+    store = online_sales()
+    if not store.get("connected"):
+        raise RuntimeError(store.get("error") or "online store unreachable")
+    sales = store.get("sales", [])
+    local = load()
+    activations = service_call("/api/activations")
+    accepted = service_call("/api/terms")
+    owners = {}  # key hash -> (name, email, key, order)
+    for r in local:
+        if r.get("key"):
+            owners[key_hash(r["key"])] = (r.get("name"), r.get("email"), r["key"], "issued by hand")
+    for sale in sales:
+        if sale.get("key"):
+            owners[key_hash(sale["key"])] = (sale.get("name"), sale.get("email"), sale["key"],
+                                             f"Lemon Squeezy #{sale.get('order_number') or sale.get('order_id')}")
+    machine_owner = {row.get("machine"): owners.get(h) for h, row in activations.items() if row.get("machine")}
+    machine_of_key = {h: row.get("machine") for h, row in activations.items()}
+
+    rows = []
+    for sale in sales:
+        if not sale.get("terms"):
+            continue
+        machine = machine_of_key.get(key_hash(sale.get("key") or ""), "") or ""
+        rows.append((sale.get("terms_accepted") or sale.get("created") or "", "Checkout (macid.net)", sale.get("terms"),
+                     sale.get("name"), sale.get("email"), sale.get("key"),
+                     f"Lemon Squeezy #{sale.get('order_number') or sale.get('order_id')}" + (" (test)" if sale.get("test_mode") else ""),
+                     machine[:10], "", ""))
+    for machine, rec in accepted.items():
+        if machine.startswith("_"):
+            continue
+        name, email, key, order = machine_owner.get(machine) or ("", "", "", "trial or not activated")
+        for version, at in (rec.get("accepted") or {}).items():
+            rows.append((at, "Mac ID app", version, name, email, key, order, machine[:10],
+                         rec.get("app_version"), rec.get("os")))
+    rows.sort(key=lambda r: r[0] or "")
+    out = [csv_row(("accepted_at", "where", "terms_version", "name", "email", "licence_key", "order",
+                    "mac", "app_version", "macos"))]
+    out += [csv_row(r) for r in rows]
+    return "\n".join(out)
+
+
 # ----------------------------------------------------------------- server
 
 class Handler(BaseHTTPRequestHandler):
@@ -175,6 +224,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps(service_call("/api/terms")))
             except Exception as exc:  # noqa: BLE001
                 return self._send(200, json.dumps({"_error": str(exc)}))
+        if path == "/api/terms-log.csv":
+            try:
+                return self._send(200, terms_log_csv(), "text/csv")
+            except Exception as exc:  # noqa: BLE001
+                return self._send(502, f"Couldn't build the terms log: the PC or the tunnel didn't answer ({exc}). Try again in a moment.", "text/plain; charset=utf-8")
         if path == "/api/export.csv":
             rows = load()
             out = ["name,email,key,license_id,price,note,issued,revoked"]
