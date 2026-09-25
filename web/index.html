@@ -1148,7 +1148,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
   // Paste the product's checkout link from Lemon Squeezy here (Products -> your product -> Share).
   // While it is empty the button explains that checkout isn't connected, rather than looking like
   // a dead link or, worse, sending someone to a checkout that can't deliver a key.
-  var CHECKOUT_URL = '';
+  var CHECKOUT_URL = 'https://macidapp.lemonsqueezy.com/checkout/buy/07c44a15-e8a3-46d4-ab8f-55a485047a7a';
   // Version of the Terms of Use the buyer agrees to; sent to checkout alongside the claim token.
   var TERMS_VERSION = '2026-09-24';
 
@@ -1362,7 +1362,7 @@ section[id]{scroll-margin-top:var(--nav-h)}
 
   if (CHECKOUT_URL) {
     var s = document.createElement('script');
-    s.src = 'https://app.lemonsqueezy.com/js/lemon.js';
+    s.src = 'https://assets.lemonsqueezy.com/lemon.js';   // the address Lemon Squeezy's own embed code uses
     s.defer = true;
     s.onload = function () {
       if (window.createLemonSqueezy) window.createLemonSqueezy();
