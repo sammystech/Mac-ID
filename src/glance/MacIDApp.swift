@@ -82,14 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        #if ENROLLMENT_PREVIEW
-        // Enrollment test build: nothing but the new circular enrollment, and nothing saved. It
-        // runs alongside the real Mac ID without starting face unlock, the menu bar item or the
-        // licence checks.
-        NSApp.setActivationPolicy(.accessory)
-        OnboardingController.startEnrollmentPreview()
-        return
-        #endif
         #if DEBUG
         if let preview = UserDefaults.standard.string(forKey: "MacIDPreviewGate") {
             LicenseGateWindow.previewState = preview == "expired" ? .expired : .notStarted

@@ -127,8 +127,7 @@ private struct EnrollmentSweepOverlay: View {
 
     var body: some View {
         // Read observable fields in `body` so the hosting view actually subscribes to changes.
-        // No directional sweep while circling: there's no single direction to send the head.
-        let pose = host.controller.isCircling ? nil : host.controller.currentPose
+        let pose = host.controller.currentPose
         let presented = host.isPresented
         let guiding = host.controller.guideVisible
         let tooFar = host.controller.isTooFar
